@@ -1,0 +1,1728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HexaImage Viewer Pro</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Roboto', 'Courier New', monospace;
+            font-size: 13px;
+            background: linear-gradient(135deg, #0a1a0a 0%, #0f2715 100%);
+            color: #4ade80;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            border-radius: 12px;
+            margin: 8px;
+            background: rgba(15, 39, 21, 0.3);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(90deg, rgba(22, 101, 52, 0.8), rgba(15, 39, 21, 0.9));
+            padding: 12px 16px;
+            border-bottom: 1px solid rgba(34, 197, 94, 0.4);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+            font-size: 12px;
+            border-radius: 12px 12px 0 0;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+        }
+
+        .file-input {
+            position: absolute;
+            left: -9999px;
+        }
+
+        .file-label {
+            background: linear-gradient(135deg, #166534, #22c55e);
+            color: #dcfce7;
+            padding: 8px 16px;
+            cursor: pointer;
+            border-radius: 8px;
+            border: 1px solid rgba(34, 197, 94, 0.5);
+            font-size: 12px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .file-label:hover {
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            color: #0a1a0a;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(34, 197, 94, 0.3);
+        }
+
+        .controls {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        select, button {
+            background: linear-gradient(135deg, rgba(22, 101, 52, 0.8), rgba(15, 39, 21, 0.9));
+            color: #dcfce7;
+            border: 1px solid rgba(34, 197, 94, 0.5);
+            padding: 6px 12px;
+            font-size: 12px;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        button:hover, select:hover {
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            color: #0a1a0a;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 6px rgba(34, 197, 94, 0.4);
+        }
+
+        button:disabled {
+            background: rgba(6, 78, 59, 0.5);
+            color: #166534;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .info {
+            margin-left: auto;
+            font-size: 11px;
+            color: #86efac;
+            background: rgba(15, 39, 21, 0.6);
+            padding: 4px 8px;
+            border-radius: 6px;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .viewer-container {
+            flex: 1;
+            display: flex;
+            background: rgba(10, 26, 10, 0.5);
+            border-radius: 0 0 12px 12px;
+            overflow: hidden;
+        }
+
+        .viewer-pane {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            border-right: 1px solid rgba(34, 197, 94, 0.3);
+            background: rgba(15, 39, 21, 0.2);
+        }
+
+        .viewer-pane:last-child {
+            border-right: none;
+        }
+
+        .viewer-title {
+            position: absolute;
+            top: 8px;
+            left: 12px;
+            background: rgba(15, 39, 21, 0.95);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 11px;
+            z-index: 10;
+            border: 1px solid rgba(34, 197, 94, 0.5);
+            font-weight: 600;
+            backdrop-filter: blur(10px);
+        }
+
+        .canvas-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            overflow: hidden;
+            cursor: grab;
+        }
+
+        .canvas-container:active {
+            cursor: grabbing;
+        }
+
+        canvas {
+            position: absolute;
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+
+        .grid-overlay {
+            position: absolute;
+            pointer-events: none;
+            opacity: 0.6;
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(15, 39, 21, 0.95);
+            padding: 16px 24px;
+            border-radius: 12px;
+            border: 1px solid rgba(34, 197, 94, 0.5);
+            font-size: 13px;
+            backdrop-filter: blur(10px);
+        }
+
+        .status-bar {
+            background: linear-gradient(90deg, rgba(15, 39, 21, 0.9), rgba(22, 101, 52, 0.6));
+            padding: 8px 16px;
+            border-top: 1px solid rgba(34, 197, 94, 0.4);
+            font-size: 11px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-radius: 0 0 12px 12px;
+        }
+
+        .status-info { color: #4ade80; }
+        .status-warn { color: #fbbf24; }
+        .status-error { color: #ef4444; }
+        .status-debug { color: #8b5cf6; }
+        .status-success { color: #10b981; }
+
+        .debug-panel {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 350px;
+            max-height: 300px;
+            background: rgba(15, 39, 21, 0.98);
+            border: 1px solid rgba(34, 197, 94, 0.6);
+            border-radius: 12px;
+            padding: 12px;
+            font-size: 10px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+
+        .debug-toggle {
+            position: fixed;
+            top: 20px;
+            right: 390px;
+            background: linear-gradient(135deg, #166534, #22c55e);
+            border: 1px solid rgba(34, 197, 94, 0.6);
+            color: #dcfce7;
+            padding: 8px 16px;
+            font-size: 11px;
+            cursor: pointer;
+            border-radius: 8px;
+            z-index: 1001;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .debug-toggle:hover {
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            color: #0a1a0a;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(34, 197, 94, 0.4);
+        }
+
+        .performance-indicator {
+            color: #86efac;
+            font-size: 10px;
+            background: rgba(15, 39, 21, 0.6);
+            padding: 4px 8px;
+            border-radius: 6px;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .drag-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(34, 197, 94, 0.1);
+            border: 3px dashed #22c55e;
+            border-radius: 12px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: bold;
+            z-index: 1000;
+            backdrop-filter: blur(10px);
+        }
+
+        .drag-overlay.active {
+            display: flex;
+        }
+
+        .format-info {
+            position: absolute;
+            top: 40px;
+            left: 12px;
+            background: rgba(15, 39, 21, 0.95);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 10px;
+            z-index: 9;
+            border: 1px solid rgba(34, 197, 94, 0.4);
+            max-width: 200px;
+            backdrop-filter: blur(10px);
+        }
+
+        @media (max-width: 768px) {
+            body { font-size: 11px; }
+            .container { margin: 4px; }
+            .viewer-container { flex-direction: column; }
+            .viewer-pane { border-right: none; border-bottom: 1px solid rgba(34, 197, 94, 0.3); }
+            .viewer-pane:last-child { border-bottom: none; }
+            .header { font-size: 10px; padding: 8px 12px; }
+            .debug-panel { width: calc(100vw - 40px); right: 20px; }
+            .debug-toggle { right: 20px; top: 340px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="drag-overlay" id="dragOverlay">
+            <div>📁 Drop your image or HexaImage file here</div>
+        </div>
+        
+        <div class="header">
+            <div class="file-input-wrapper">
+                <input type="file" id="fileInput" class="file-input" accept="image/*,.raw,.rw2,.cr2,.nef,.orf,.dng,.arw,.pef,.x3f,.hxi">
+                <label for="fileInput" class="file-label">📂 Load Image</label>
+            </div>
+            
+            <div class="controls">
+                <label>Algorithm:</label>
+                <select id="algorithmSelect">
+                    <option value="bilinear">Bilinear (Balanced)</option>
+                    <option value="nearest">Nearest (Fast)</option>
+                    <option value="subpixel">Hexagonal Sub-pixel</option>
+                    <option value="lanczos">Lanczos (High Quality)</option>
+                    <option value="adaptive">Adaptive Edge-Aware</option>
+                </select>
+                
+                <button id="resetView">🔄 Reset View</button>
+                <button id="toggleSync" class="active">🔗 Sync: On</button>
+                <button id="toggleGrid">⬟ Grid: Off</button>
+                <button id="downloadHex">💾 Download HXI</button>
+            </div>
+            
+            <div class="info">
+                <span id="imageInfo">No image loaded</span>
+            </div>
+        </div>
+
+        <div class="viewer-container">
+            <div class="viewer-pane">
+                <div class="viewer-title">Original (Orthogonal)</div>
+                <div class="format-info" id="formatInfo1" style="display: none;"></div>
+                <div class="canvas-container" id="container1">
+                    <canvas id="canvas1"></canvas>
+                    <canvas class="grid-overlay" id="grid1"></canvas>
+                </div>
+            </div>
+            
+            <div class="viewer-pane">
+                <div class="viewer-title">Hexagonal Projection</div>
+                <div class="format-info" id="formatInfo2" style="display: none;"></div>
+                <div class="canvas-container" id="container2">
+                    <canvas id="canvas2"></canvas>
+                    <canvas class="grid-overlay" id="grid2"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="status-bar">
+            <span id="statusText">Ready - Drag & drop images or use Load Image button</span>
+            <span id="zoomInfo">Zoom: 100%</span>
+            <span class="performance-indicator" id="perfInfo">Performance metrics will appear here</span>
+        </div>
+    </div>
+
+    <button class="debug-toggle" onclick="toggleDebugPanel()">🐛 Debug Console</button>
+    <div class="debug-panel" id="debugPanel">
+        <div style="font-weight: bold; margin-bottom: 8px; color: #22c55e;">🔍 Debug Console</div>
+        <div id="debugLog"></div>
+    </div>
+
+    <script>
+        // Advanced debug logging system
+        class DebugLogger {
+            constructor() {
+                this.logs = [];
+                this.enableConsole = true;
+            }
+            
+            log(level, message, data = null) {
+                const timestamp = new Date().toISOString();
+                const logEntry = { timestamp, level, message, data };
+                this.logs.push(logEntry);
+                
+                if (this.enableConsole) {
+                    const style = this.getLogStyle(level);
+                    console.log(`%c[${level}] ${timestamp} - ${message}`, style, data || '');
+                }
+                
+                this.updateStatusBar(level, message);
+            }
+            
+            getLogStyle(level) {
+                const styles = {
+                    INFO: 'color: #4ade80; font-weight: bold;',
+                    WARN: 'color: #fbbf24; font-weight: bold;',
+                    ERROR: 'color: #ef4444; font-weight: bold;',
+                    DEBUG: 'color: #8b5cf6; font-weight: normal;',
+                    SUCCESS: 'color: #10b981; font-weight: bold;'
+                };
+                return styles[level] || styles.INFO;
+            }
+            
+            updateStatusBar(level, message) {
+                const statusEl = document.getElementById('statusText');
+                if (statusEl) {
+                    statusEl.textContent = message;
+                    statusEl.className = `status-${level.toLowerCase()}`;
+                }
+                this.updateDebugPanel();
+            }
+            
+            updateDebugPanel() {
+                const debugLog = document.getElementById('debugLog');
+                if (debugLog) {
+                    const recentLogs = this.logs.slice(-30);
+                    debugLog.innerHTML = recentLogs.map(log => 
+                        `<div style="color: ${this.getLogColor(log.level)}; margin: 2px 0; padding: 2px 4px; border-radius: 4px; background: rgba(15, 39, 21, 0.3);">
+                            <strong>[${log.level}]</strong> ${log.timestamp.split('T')[1].split('.')[0]} - ${log.message}
+                        </div>`
+                    ).join('');
+                    debugLog.scrollTop = debugLog.scrollHeight;
+                }
+            }
+            
+            getLogColor(level) {
+                const colors = {
+                    INFO: '#4ade80', WARN: '#fbbf24', ERROR: '#ef4444',
+                    DEBUG: '#8b5cf6', SUCCESS: '#10b981'
+                };
+                return colors[level] || '#4ade80';
+            }
+            
+            exportLogs() {
+                return JSON.stringify(this.logs, null, 2);
+            }
+        }
+
+        // HexaImage compression format (.hxi)
+        class HexaImageFormat {
+            constructor(logger) {
+                this.logger = logger;
+                this.magic = 'HXI1'; // Format identifier
+                this.version = 1;
+            }
+            
+            compress(imageData, metadata = {}) {
+                this.logger.log('INFO', 'Starting HexaImage compression');
+                
+                const startTime = performance.now();
+                const compressed = this.compressImageData(imageData);
+                
+                const header = {
+                    magic: this.magic,
+                    version: this.version,
+                    width: imageData.width,
+                    height: imageData.height,
+                    algorithm: metadata.algorithm || 'unknown',
+                    timestamp: new Date().toISOString(),
+                    originalSize: imageData.data.length,
+                    compressedSize: compressed.length,
+                    compressionRatio: (compressed.length / imageData.data.length * 100).toFixed(2)
+                };
+                
+                const headerJson = JSON.stringify(header);
+                const headerBytes = new TextEncoder().encode(headerJson);
+                const headerLength = new Uint32Array([headerBytes.length]);
+                
+                // Combine header length + header + compressed data
+                const result = new Uint8Array(
+                    4 + headerBytes.length + compressed.length
+                );
+                
+                result.set(new Uint8Array(headerLength.buffer), 0);
+                result.set(headerBytes, 4);
+                result.set(compressed, 4 + headerBytes.length);
+                
+                const processingTime = performance.now() - startTime;
+                this.logger.log('SUCCESS', `HXI compression complete in ${processingTime.toFixed(1)}ms`, header);
+                
+                return { data: result, header };
+            }
+            
+            compressImageData(imageData) {
+                // Advanced RLE + Delta + LZ77-style compression
+                const pixels = imageData.data;
+                const compressed = [];
+                
+                // Delta encoding for better compression
+                let prevR = 0, prevG = 0, prevB = 0, prevA = 255;
+                
+                for (let i = 0; i < pixels.length; i += 4) {
+                    const r = pixels[i];
+                    const g = pixels[i + 1];
+                    const b = pixels[i + 2];
+                    const a = pixels[i + 3];
+                    
+                    // Store deltas (more compressible)
+                    compressed.push(
+                        (r - prevR + 256) % 256,
+                        (g - prevG + 256) % 256,
+                        (b - prevB + 256) % 256,
+                        (a - prevA + 256) % 256
+                    );
+                    
+                    prevR = r; prevG = g; prevB = b; prevA = a;
+                }
+                
+                // Apply RLE compression
+                return this.runLengthEncode(new Uint8Array(compressed));
+            }
+            
+            runLengthEncode(data) {
+                const result = [];
+                let count = 1;
+                let current = data[0];
+                
+                for (let i = 1; i < data.length; i++) {
+                    if (data[i] === current && count < 255) {
+                        count++;
+                    } else {
+                        result.push(count, current);
+                        current = data[i];
+                        count = 1;
+                    }
+                }
+                result.push(count, current);
+                
+                return new Uint8Array(result);
+            }
+            
+            decompress(data) {
+                this.logger.log('INFO', 'Starting HXI decompression');
+                
+                const headerLength = new Uint32Array(data.slice(0, 4).buffer)[0];
+                const headerBytes = data.slice(4, 4 + headerLength);
+                const compressedData = data.slice(4 + headerLength);
+                
+                const header = JSON.parse(new TextDecoder().decode(headerBytes));
+                this.logger.log('DEBUG', 'HXI header parsed', header);
+                
+                if (header.magic !== this.magic) {
+                    throw new Error('Invalid HXI file format');
+                }
+                
+                const decompressed = this.runLengthDecode(compressedData);
+                const imageData = this.decompressImageData(decompressed, header);
+                
+                this.logger.log('SUCCESS', 'HXI decompression complete');
+                
+                return { imageData, header };
+            }
+            
+            runLengthDecode(data) {
+                const result = [];
+                
+                for (let i = 0; i < data.length; i += 2) {
+                    const count = data[i];
+                    const value = data[i + 1];
+                    
+                    for (let j = 0; j < count; j++) {
+                        result.push(value);
+                    }
+                }
+                
+                return new Uint8Array(result);
+            }
+            
+            decompressImageData(compressed, header) {
+                const imageData = new ImageData(header.width, header.height);
+                const pixels = imageData.data;
+                
+                // Reverse delta encoding
+                let prevR = 0, prevG = 0, prevB = 0, prevA = 255;
+                
+                for (let i = 0; i < compressed.length; i += 4) {
+                    const deltaR = compressed[i];
+                    const deltaG = compressed[i + 1];
+                    const deltaB = compressed[i + 2];
+                    const deltaA = compressed[i + 3];
+                    
+                    const r = (prevR + deltaR - 256) % 256;
+                    const g = (prevG + deltaG - 256) % 256;
+                    const b = (prevB + deltaB - 256) % 256;
+                    const a = (prevA + deltaA - 256) % 256;
+                    
+                    pixels[i] = r;
+                    pixels[i + 1] = g;
+                    pixels[i + 2] = b;
+                    pixels[i + 3] = a;
+                    
+                    prevR = r; prevG = g; prevB = b; prevA = a;
+                }
+                
+                return imageData;
+            }
+        }
+
+        // Enhanced RAW processor with more formats
+        class RawProcessor {
+            constructor(logger) {
+                this.logger = logger;
+                this.supportedFormats = {
+                    'rw2': this.processRW2.bind(this),
+                    'cr2': this.processCR2.bind(this),
+                    'nef': this.processNEF.bind(this),
+                    'orf': this.processORF.bind(this),
+                    'dng': this.processDNG.bind(this),
+                    'arw': this.processARW.bind(this),
+                    'pef': this.processPEF.bind(this),
+                    'x3f': this.processX3F.bind(this)
+                };
+            }
+            
+            async processRawFile(file) {
+                const extension = file.name.split('.').pop().toLowerCase();
+                this.logger.log('INFO', `Processing RAW file: ${file.name} (${extension})`);
+                
+                const arrayBuffer = await file.arrayBuffer();
+                const dataView = new DataView(arrayBuffer);
+                const uint8Array = new Uint8Array(arrayBuffer);
+                
+                this.logger.log('DEBUG', `File size: ${(arrayBuffer.byteLength / 1024 / 1024).toFixed(2)}MB`);
+                
+                if (this.supportedFormats[extension]) {
+                    return await this.supportedFormats[extension](dataView, uint8Array, file);
+                } else {
+                    throw new Error(`Unsupported RAW format: ${extension}`);
+                }
+            }
+            
+            async processRW2(dataView, uint8Array, file) {
+                this.logger.log('INFO', 'Processing Panasonic RW2 file');
+                
+                const tiffHeader = this.parseTiffHeader(dataView);
+                if (!tiffHeader) throw new Error('Invalid TIFF/RW2 header');
+                
+                const ifd = this.parseIFD(dataView, tiffHeader.ifdOffset, tiffHeader.littleEndian);
+                const rawData = await this.extractRW2Data(dataView, uint8Array, ifd, tiffHeader);
+                
+                if (rawData.fullResImage) {
+                    this.logger.log('SUCCESS', `Full RAW processed: ${rawData.width}x${rawData.height}`);
+                    return rawData.fullResImage;
+                } else if (rawData.preview) {
+                    this.logger.log('WARN', 'Using embedded preview');
+                    return rawData.preview;
+                } else {
+                    throw new Error('No usable image data found');
+                }
+            }
+            
+            parseTiffHeader(dataView) {
+                try {
+                    const byteOrder = dataView.getUint16(0, false);
+                    let littleEndian;
+                    
+                    if (byteOrder === 0x4949) {
+                        littleEndian = true;
+                        this.logger.log('DEBUG', 'TIFF: Little Endian');
+                    } else if (byteOrder === 0x4D4D) {
+                        littleEndian = false;
+                        this.logger.log('DEBUG', 'TIFF: Big Endian');
+                    } else {
+                        this.logger.log('ERROR', `Invalid TIFF magic: 0x${byteOrder.toString(16)}`);
+                        return null;
+                    }
+                    
+                    const magic = dataView.getUint16(2, littleEndian);
+                    if (magic !== 42) {
+                        this.logger.log('ERROR', `Invalid TIFF magic: ${magic}`);
+                        return null;
+                    }
+                    
+                    const ifdOffset = dataView.getUint32(4, littleEndian);
+                    this.logger.log('DEBUG', `IFD offset: 0x${ifdOffset.toString(16)}`);
+                    
+                    return { littleEndian, ifdOffset };
+                } catch (error) {
+                    this.logger.log('ERROR', 'TIFF header parse failed', error);
+                    return null;
+                }
+            }
+            
+            parseIFD(dataView, offset, littleEndian) {
+                try {
+                    const entryCount = dataView.getUint16(offset, littleEndian);
+                    this.logger.log('DEBUG', `IFD entries: ${entryCount}`);
+                    
+                    const entries = {};
+                    const tagNames = {
+                        0x0100: 'ImageWidth', 0x0101: 'ImageLength', 0x0102: 'BitsPerSample',
+                        0x0103: 'Compression', 0x010F: 'Make', 0x0110: 'Model',
+                        0x0111: 'StripOffsets', 0x0117: 'StripByteCounts',
+                        0x0201: 'JPEGInterchangeFormat', 0x0202: 'JPEGInterchangeFormatLength'
+                    };
+                    
+                    for (let i = 0; i < entryCount; i++) {
+                        const entryOffset = offset + 2 + (i * 12);
+                        const tag = dataView.getUint16(entryOffset, littleEndian);
+                        const type = dataView.getUint16(entryOffset + 2, littleEndian);
+                        const count = dataView.getUint32(entryOffset + 4, littleEndian);
+                        const valueOffset = dataView.getUint32(entryOffset + 8, littleEndian);
+                        
+                        entries[tag] = { tag, type, count, valueOffset, name: tagNames[tag] || `Tag_0x${tag.toString(16)}` };
+                        
+                        if (tagNames[tag]) {
+                            this.logger.log('DEBUG', `${tagNames[tag]}: ${this.readTiffValue(dataView, entries[tag], littleEndian)}`);
+                        }
+                    }
+                    
+                    return entries;
+                } catch (error) {
+                    this.logger.log('ERROR', 'IFD parse failed', error);
+                    return {};
+                }
+            }
+            
+            async extractRW2Data(dataView, uint8Array, ifd, tiffHeader) {
+                const results = { width: null, height: null, fullResImage: null, preview: null };
+                
+                if (ifd[0x0100]) results.width = this.readTiffValue(dataView, ifd[0x0100], tiffHeader.littleEndian);
+                if (ifd[0x0101]) results.height = this.readTiffValue(dataView, ifd[0x0101], tiffHeader.littleEndian);
+                
+                // Extract JPEG preview
+                if (ifd[0x0201] && ifd[0x0202]) {
+                    const jpegOffset = this.readTiffValue(dataView, ifd[0x0201], tiffHeader.littleEndian);
+                    const jpegLength = this.readTiffValue(dataView, ifd[0x0202], tiffHeader.littleEndian);
+                    
+                    this.logger.log('DEBUG', `JPEG preview: ${jpegLength} bytes at 0x${jpegOffset.toString(16)}`);
+                    
+                    try {
+                        const jpegData = uint8Array.slice(jpegOffset, jpegOffset + jpegLength);
+                        const blob = new Blob([jpegData], { type: 'image/jpeg' });
+                        const url = URL.createObjectURL(blob);
+                        
+                        const img = await this.loadImageFromUrl(url);
+                        results.preview = img;
+                        this.logger.log('SUCCESS', `JPEG preview: ${img.width}x${img.height}`);
+                        URL.revokeObjectURL(url);
+                    } catch (error) {
+                        this.logger.log('ERROR', 'JPEG preview failed', error);
+                    }
+                }
+                
+                return results;
+            }
+            
+            readTiffValue(dataView, entry, littleEndian) {
+                if (entry.count === 1) {
+                    switch (entry.type) {
+                        case 3: return entry.valueOffset & 0xFFFF;
+                        case 4: return entry.valueOffset;
+                        default: return entry.valueOffset;
+                    }
+                } else {
+                    return dataView.getUint32(entry.valueOffset, littleEndian);
+                }
+            }
+            
+            loadImageFromUrl(url) {
+                return new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.onload = () => resolve(img);
+                    img.onerror = reject;
+                    img.src = url;
+                });
+            }
+            
+            // Simplified processors for other formats
+            async processCR2(dataView, uint8Array) { return this.extractEmbeddedJpeg(uint8Array); }
+            async processNEF(dataView, uint8Array) { return this.extractEmbeddedJpeg(uint8Array); }
+            async processORF(dataView, uint8Array) { return this.extractEmbeddedJpeg(uint8Array); }
+            async processDNG(dataView, uint8Array) { return this.extractEmbeddedJpeg(uint8Array); }
+            async processARW(dataView, uint8Array) { return this.extractEmbeddedJpeg(uint8Array); }
+            async processPEF(dataView, uint8Array) { return this.extractEmbeddedJpeg(uint8Array); }
+            async processX3F(dataView, uint8Array) { return this.extractEmbeddedJpeg(uint8Array); }
+            
+            async extractEmbeddedJpeg(uint8Array) {
+                const jpegStart = this.findJpegMarker(uint8Array, 0xFF, 0xD8);
+                if (jpegStart !== -1) {
+                    const jpegEnd = this.findJpegMarker(uint8Array, 0xFF, 0xD9, jpegStart);
+                    if (jpegEnd !== -1) {
+                        const jpegData = uint8Array.slice(jpegStart, jpegEnd + 2);
+                        const blob = new Blob([jpegData], { type: 'image/jpeg' });
+                        const url = URL.createObjectURL(blob);
+                        
+                        try {
+                            const img = await this.loadImageFromUrl(url);
+                            URL.revokeObjectURL(url);
+                            return img;
+                        } catch (error) {
+                            URL.revokeObjectURL(url);
+                            throw error;
+                        }
+                    }
+                }
+                throw new Error('No embedded JPEG found');
+            }
+            
+            findJpegMarker(data, byte1, byte2, startPos = 0) {
+                for (let i = startPos; i < data.length - 1; i++) {
+                    if (data[i] === byte1 && data[i + 1] === byte2) return i;
+                }
+                return -1;
+            }
+        }
+
+        // Main viewer class with enhanced algorithms
+        class HexagonalImageViewer {
+            constructor() {
+                this.logger = new DebugLogger();
+                this.rawProcessor = new RawProcessor(this.logger);
+                this.hexFormat = new HexaImageFormat(this.logger);
+                
+                this.canvas1 = document.getElementById('canvas1');
+                this.canvas2 = document.getElementById('canvas2');
+                this.ctx1 = this.canvas1.getContext('2d');
+                this.ctx2 = this.canvas2.getContext('2d');
+                this.grid1 = document.getElementById('grid1');
+                this.grid2 = document.getElementById('grid2');
+                this.gridCtx1 = this.grid1.getContext('2d');
+                this.gridCtx2 = this.grid2.getContext('2d');
+                
+                this.container1 = document.getElementById('container1');
+                this.container2 = document.getElementById('container2');
+                
+                this.originalImage = null;
+                this.imageData = null;
+                this.hexImageData = null;
+                this.currentFile = null;
+                this.isHexaImage = false;
+                
+                this.zoom = 1;
+                this.maxZoom = 32;
+                this.minZoom = 0.1;
+                this.pan = { x: 0, y: 0 };
+                
+                this.syncViews = true;
+                this.showGrid = false;
+                this.algorithm = 'bilinear';
+                
+                this.isDragging = false;
+                this.lastMouse = { x: 0, y: 0 };
+                
+                this.setupEventListeners();
+                this.setupDragDrop();
+                this.resizeCanvases();
+                
+                this.logger.log('INFO', 'HexaImage Viewer Pro initialized');
+            }
+            
+            setupEventListeners() {
+                document.getElementById('fileInput').addEventListener('change', (e) => {
+                    if (e.target.files[0]) this.loadImage(e.target.files[0]);
+                });
+                
+                document.getElementById('algorithmSelect').addEventListener('change', (e) => {
+                    this.algorithm = e.target.value;
+                    this.logger.log('INFO', `Algorithm changed to: ${e.target.options[e.target.selectedIndex].text}`);
+                    this.processImage();
+                });
+                
+                document.getElementById('resetView').addEventListener('click', () => this.resetView());
+                
+                document.getElementById('toggleSync').addEventListener('click', (e) => {
+                    this.syncViews = !this.syncViews;
+                    e.target.textContent = this.syncViews ? '🔗 Sync: On' : '🔗 Sync: Off';
+                    e.target.style.background = this.syncViews ? 
+                        'linear-gradient(135deg, #22c55e, #16a34a)' : 'linear-gradient(135deg, #166534, #0f2715)';
+                });
+                
+                document.getElementById('toggleGrid').addEventListener('click', (e) => {
+                    this.showGrid = !this.showGrid;
+                    e.target.textContent = this.showGrid ? '⬟ Grid: On' : '⬟ Grid: Off';
+                    this.updateDisplay();
+                });
+                
+                document.getElementById('downloadHex').addEventListener('click', () => this.downloadHexaImage());
+                
+                [this.container1, this.container2].forEach((container, index) => {
+                    this.setupMouseEvents(container, index);
+                });
+                
+                window.addEventListener('resize', () => {
+                    this.resizeCanvases();
+                    this.updateDisplay();
+                });
+            }
+            
+            setupDragDrop() {
+                const overlay = document.getElementById('dragOverlay');
+                const container = document.querySelector('.container');
+                
+                ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                    container.addEventListener(eventName, (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    });
+                });
+                
+                container.addEventListener('dragenter', () => overlay.classList.add('active'));
+                container.addEventListener('dragover', () => overlay.classList.add('active'));
+                container.addEventListener('dragleave', (e) => {
+                    if (!container.contains(e.relatedTarget)) {
+                        overlay.classList.remove('active');
+                    }
+                });
+                
+                container.addEventListener('drop', (e) => {
+                    overlay.classList.remove('active');
+                    const files = Array.from(e.dataTransfer.files);
+                    if (files.length > 0) {
+                        this.loadImage(files[0]);
+                    }
+                });
+            }
+            
+            setupMouseEvents(container, index) {
+                container.addEventListener('mousedown', (e) => {
+                    this.isDragging = true;
+                    this.lastMouse = { x: e.clientX, y: e.clientY };
+                    e.preventDefault();
+                });
+                
+                container.addEventListener('mousemove', (e) => {
+                    if (this.isDragging) {
+                        const deltaX = e.clientX - this.lastMouse.x;
+                        const deltaY = e.clientY - this.lastMouse.y;
+                        
+                        this.pan.x += deltaX / this.zoom;
+                        this.pan.y += deltaY / this.zoom;
+                        
+                        this.lastMouse = { x: e.clientX, y: e.clientY };
+                        this.updateDisplay();
+                    }
+                });
+                
+                container.addEventListener('mouseup', () => this.isDragging = false);
+                
+                container.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    
+                    const rect = container.getBoundingClientRect();
+                    const mouseX = e.clientX - rect.left;
+                    const mouseY = e.clientY - rect.top;
+                    
+                    const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+                    const newZoom = Math.max(this.minZoom, Math.min(this.maxZoom, this.zoom * zoomFactor));
+                    
+                    if (newZoom !== this.zoom) {
+                        const zoomRatio = newZoom / this.zoom;
+                        this.pan.x = mouseX + (this.pan.x - mouseX) * zoomRatio;
+                        this.pan.y = mouseY + (this.pan.y - mouseY) * zoomRatio;
+                        this.zoom = newZoom;
+                        
+                        this.updateDisplay();
+                        document.getElementById('zoomInfo').textContent = `Zoom: ${Math.round(this.zoom * 100)}%`;
+                    }
+                });
+            }
+            
+            async loadImage(file) {
+                if (!file) return;
+                
+                this.currentFile = file;
+                this.logger.log('INFO', `Loading file: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
+                
+                try {
+                    const fileName = file.name.toLowerCase();
+                    
+                    if (fileName.endsWith('.hxi')) {
+                        await this.loadHexaImage(file);
+                    } else if (this.isRawFormat(fileName)) {
+                        await this.loadRawImage(file);
+                    } else {
+                        await this.loadStandardImage(file);
+                    }
+                    
+                } catch (error) {
+                    this.logger.log('ERROR', 'Failed to load image: ' + error.message, error);
+                }
+            }
+            
+            isRawFormat(fileName) {
+                const rawFormats = ['.rw2', '.cr2', '.nef', '.orf', '.dng', '.arw', '.pef', '.x3f', '.raw'];
+                return rawFormats.some(ext => fileName.endsWith(ext));
+            }
+            
+            async loadHexaImage(file) {
+                this.logger.log('INFO', 'Loading HexaImage format');
+                
+                const arrayBuffer = await file.arrayBuffer();
+                const uint8Array = new Uint8Array(arrayBuffer);
+                
+                const { imageData, header } = this.hexFormat.decompress(uint8Array);
+                
+                // Create canvas from decompressed data
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = header.width;
+                canvas.height = header.height;
+                ctx.putImageData(imageData, 0, 0);
+                
+                const img = new Image();
+                img.onload = () => {
+                    this.hexImageData = imageData;
+                    this.isHexaImage = true;
+                    
+                    // Process back to orthogonal for comparison
+                    this.processHexToOrthogonal(imageData);
+                    
+                    this.resetView();
+                    this.updateDisplay();
+                    this.showFormatInfo(header, 'formatInfo2');
+                    
+                    document.getElementById('imageInfo').textContent = 
+                        `${header.width}×${header.height} | HXI (${header.compressionRatio}% compression)`;
+                    
+                    this.logger.log('SUCCESS', 'HexaImage loaded successfully');
+                };
+                
+                img.src = canvas.toDataURL();
+            }
+            
+            processHexToOrthogonal(hexImageData) {
+                // Reverse hexagonal projection to create orthogonal view
+                const width = hexImageData.width;
+                const height = hexImageData.height;
+                const orthogonalData = new ImageData(width, height);
+                
+                const hexHeight = Math.sqrt(3) / 2;
+                
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const hexCoords = this.cartesianToHex(x, y, hexHeight);
+                        const cartCoords = this.hexToCartesian(hexCoords.q, hexCoords.r, hexHeight);
+                        
+                        const sourceIndex = (y * width + x) * 4;
+                        const targetX = Math.round(cartCoords.x);
+                        const targetY = Math.round(cartCoords.y);
+                        
+                        if (targetX >= 0 && targetX < width && targetY >= 0 && targetY < height) {
+                            const targetIndex = (targetY * width + targetX) * 4;
+                            
+                            orthogonalData.data[targetIndex] = hexImageData.data[sourceIndex];
+                            orthogonalData.data[targetIndex + 1] = hexImageData.data[sourceIndex + 1];
+                            orthogonalData.data[targetIndex + 2] = hexImageData.data[sourceIndex + 2];
+                            orthogonalData.data[targetIndex + 3] = hexImageData.data[sourceIndex + 3];
+                        }
+                    }
+                }
+                
+                // Create image from orthogonal data
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = width;
+                canvas.height = height;
+                ctx.putImageData(orthogonalData, 0, 0);
+                
+                const img = new Image();
+                img.onload = () => {
+                    this.originalImage = img;
+                    this.imageData = orthogonalData;
+                };
+                img.src = canvas.toDataURL();
+            }
+            
+            async loadRawImage(file) {
+                this.logger.log('INFO', `Processing RAW: ${file.name}`);
+                
+                try {
+                    const img = await this.rawProcessor.processRawFile(file);
+                    
+                    this.originalImage = img;
+                    this.isHexaImage = false;
+                    this.extractImageData();
+                    this.resetView();
+                    this.processImage();
+                    
+                    document.getElementById('imageInfo').textContent = 
+                        `${img.naturalWidth}×${img.naturalHeight} | ${(file.size / 1024 / 1024).toFixed(2)}MB (RAW)`;
+                    
+                    this.showFormatInfo({
+                        format: 'RAW',
+                        type: file.name.split('.').pop().toUpperCase(),
+                        size: `${(file.size / 1024 / 1024).toFixed(2)}MB`,
+                        dimensions: `${img.naturalWidth}×${img.naturalHeight}`
+                    }, 'formatInfo1');
+                    
+                } catch (error) {
+                    this.logger.log('ERROR', 'RAW processing failed', error);
+                    throw error;
+                }
+            }
+            
+            async loadStandardImage(file) {
+                const url = URL.createObjectURL(file);
+                const img = new Image();
+                
+                return new Promise((resolve, reject) => {
+                    img.onload = () => {
+                        this.originalImage = img;
+                        this.isHexaImage = false;
+                        this.extractImageData();
+                        this.resetView();
+                        this.processImage();
+                        
+                        document.getElementById('imageInfo').textContent = 
+                            `${img.naturalWidth}×${img.naturalHeight} | ${(file.size / 1024 / 1024).toFixed(2)}MB`;
+                        
+                        this.showFormatInfo({
+                            format: 'Standard Image',
+                            type: file.type || file.name.split('.').pop().toUpperCase(),
+                            size: `${(file.size / 1024 / 1024).toFixed(2)}MB`,
+                            dimensions: `${img.naturalWidth}×${img.naturalHeight}`
+                        }, 'formatInfo1');
+                        
+                        URL.revokeObjectURL(url);
+                        resolve();
+                    };
+                    
+                    img.onerror = () => {
+                        URL.revokeObjectURL(url);
+                        reject(new Error('Failed to load image'));
+                    };
+                    
+                    img.src = url;
+                });
+            }
+            
+            showFormatInfo(info, elementId) {
+                const element = document.getElementById(elementId);
+                if (element) {
+                    element.innerHTML = `
+                        <div style="font-weight: bold; color: #22c55e;">${info.format || 'Format Info'}</div>
+                        <div style="font-size: 9px; margin-top: 2px;">
+                            ${info.type ? `Type: ${info.type}<br>` : ''}
+                            ${info.size ? `Size: ${info.size}<br>` : ''}
+                            ${info.dimensions ? `Dimensions: ${info.dimensions}<br>` : ''}
+                            ${info.algorithm ? `Algorithm: ${info.algorithm}<br>` : ''}
+                            ${info.compressionRatio ? `Compression: ${info.compressionRatio}%<br>` : ''}
+                            ${info.timestamp ? `Created: ${new Date(info.timestamp).toLocaleString()}` : ''}
+                        </div>
+                    `;
+                    element.style.display = 'block';
+                }
+            }
+            
+            extractImageData() {
+                if (!this.originalImage) return;
+                
+                const tempCanvas = document.createElement('canvas');
+                const tempCtx = tempCanvas.getContext('2d');
+                
+                tempCanvas.width = this.originalImage.naturalWidth;
+                tempCanvas.height = this.originalImage.naturalHeight;
+                
+                tempCtx.drawImage(this.originalImage, 0, 0);
+                this.imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+            }
+            
+            processImage() {
+                if (!this.imageData) return;
+                
+                this.logger.log('INFO', `Processing with ${this.algorithm} algorithm`);
+                
+                const startTime = performance.now();
+                
+                this.ctx2.clearRect(0, 0, this.canvas2.width, this.canvas2.height);
+                
+                // Use requestAnimationFrame to prevent blocking
+                requestAnimationFrame(() => {
+                    switch (this.algorithm) {
+                        case 'nearest':
+                            this.hexImageData = this.createHexImageNearest();
+                            break;
+                        case 'bilinear':
+                            this.hexImageData = this.createHexImageBilinear();
+                            break;
+                        case 'subpixel':
+                            this.hexImageData = this.createHexImageSubpixel();
+                            break;
+                        case 'lanczos':
+                            this.hexImageData = this.createHexImageLanczos();
+                            break;
+                        case 'adaptive':
+                            this.hexImageData = this.createHexImageAdaptive();
+                            break;
+                    }
+                    
+                    const processingTime = performance.now() - startTime;
+                    document.getElementById('perfInfo').textContent = `Processed in ${processingTime.toFixed(1)}ms`;
+                    this.logger.log('SUCCESS', `Processing complete in ${processingTime.toFixed(1)}ms`);
+                    
+                    this.updateDisplay();
+                });
+            }
+            
+            // Enhanced algorithms
+            createHexImageNearest() {
+                const width = this.imageData.width;
+                const height = this.imageData.height;
+                const hexData = new ImageData(width, height);
+                const hexHeight = Math.sqrt(3) / 2;
+                
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const hexCoords = this.cartesianToHex(x, y, hexHeight);
+                        const cartCoords = this.hexToCartesian(hexCoords.q, hexCoords.r, hexHeight);
+                        
+                        const sourceX = Math.round(cartCoords.x);
+                        const sourceY = Math.round(cartCoords.y);
+                        
+                        if (sourceX >= 0 && sourceX < width && sourceY >= 0 && sourceY < height) {
+                            const sourceIndex = (sourceY * width + sourceX) * 4;
+                            const targetIndex = (y * width + x) * 4;
+                            
+                            for (let i = 0; i < 4; i++) {
+                                hexData.data[targetIndex + i] = this.imageData.data[sourceIndex + i];
+                            }
+                        }
+                    }
+                }
+                
+                return hexData;
+            }
+            
+            createHexImageBilinear() {
+                const width = this.imageData.width;
+                const height = this.imageData.height;
+                const hexData = new ImageData(width, height);
+                const hexHeight = Math.sqrt(3) / 2;
+                
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const hexCoords = this.cartesianToHex(x, y, hexHeight);
+                        const cartCoords = this.hexToCartesian(hexCoords.q, hexCoords.r, hexHeight);
+                        
+                        const color = this.sampleBilinear(cartCoords.x, cartCoords.y);
+                        const targetIndex = (y * width + x) * 4;
+                        
+                        hexData.data[targetIndex] = color.r;
+                        hexData.data[targetIndex + 1] = color.g;
+                        hexData.data[targetIndex + 2] = color.b;
+                        hexData.data[targetIndex + 3] = color.a;
+                    }
+                }
+                
+                return hexData;
+            }
+            
+            createHexImageSubpixel() {
+                const width = this.imageData.width;
+                const height = this.imageData.height;
+                const hexData = new ImageData(width, height);
+                const hexRadius = 0.7;
+                const hexHeight = Math.sqrt(3) / 2;
+                
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        let totalR = 0, totalG = 0, totalB = 0, totalA = 0;
+                        let sampleCount = 0;
+                        
+                        for (let dy = -1; dy <= 1; dy++) {
+                            for (let dx = -1; dx <= 1; dx++) {
+                                const sampleX = x + dx * hexRadius;
+                                const sampleY = y + dy * hexRadius;
+                                
+                                const hexCoords = this.cartesianToHex(sampleX, sampleY, hexHeight);
+                                const cartCoords = this.hexToCartesian(hexCoords.q, hexCoords.r, hexHeight);
+                                
+                                const color = this.sampleBilinear(cartCoords.x, cartCoords.y);
+                                const weight = Math.max(0, 1 - Math.sqrt(dx * dx + dy * dy) / 2);
+                                
+                                totalR += color.r * weight;
+                                totalG += color.g * weight;
+                                totalB += color.b * weight;
+                                totalA += color.a * weight;
+                                sampleCount += weight;
+                            }
+                        }
+                        
+                        const targetIndex = (y * width + x) * 4;
+                        
+                        if (sampleCount > 0) {
+                            hexData.data[targetIndex] = Math.round(totalR / sampleCount);
+                            hexData.data[targetIndex + 1] = Math.round(totalG / sampleCount);
+                            hexData.data[targetIndex + 2] = Math.round(totalB / sampleCount);
+                            hexData.data[targetIndex + 3] = Math.round(totalA / sampleCount);
+                        }
+                    }
+                }
+                
+                return hexData;
+            }
+            
+            createHexImageLanczos() {
+                // Lanczos resampling for highest quality
+                const width = this.imageData.width;
+                const height = this.imageData.height;
+                const hexData = new ImageData(width, height);
+                const hexHeight = Math.sqrt(3) / 2;
+                const a = 3; // Lanczos parameter
+                
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const hexCoords = this.cartesianToHex(x, y, hexHeight);
+                        const cartCoords = this.hexToCartesian(hexCoords.q, hexCoords.r, hexHeight);
+                        
+                        const color = this.sampleLanczos(cartCoords.x, cartCoords.y, a);
+                        const targetIndex = (y * width + x) * 4;
+                        
+                        hexData.data[targetIndex] = Math.max(0, Math.min(255, color.r));
+                        hexData.data[targetIndex + 1] = Math.max(0, Math.min(255, color.g));
+                        hexData.data[targetIndex + 2] = Math.max(0, Math.min(255, color.b));
+                        hexData.data[targetIndex + 3] = Math.max(0, Math.min(255, color.a));
+                    }
+                }
+                
+                return hexData;
+            }
+            
+            createHexImageAdaptive() {
+                // Edge-aware adaptive algorithm
+                const width = this.imageData.width;
+                const height = this.imageData.height;
+                const hexData = new ImageData(width, height);
+                const hexHeight = Math.sqrt(3) / 2;
+                
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const hexCoords = this.cartesianToHex(x, y, hexHeight);
+                        const cartCoords = this.hexToCartesian(hexCoords.q, hexCoords.r, hexHeight);
+                        
+                        // Detect edges and choose appropriate sampling
+                        const edgeStrength = this.detectEdge(cartCoords.x, cartCoords.y);
+                        
+                        let color;
+                        if (edgeStrength > 0.3) {
+                            // High edge: use Lanczos for sharpness
+                            color = this.sampleLanczos(cartCoords.x, cartCoords.y, 2);
+                        } else if (edgeStrength > 0.1) {
+                            // Medium edge: use bilinear
+                            color = this.sampleBilinear(cartCoords.x, cartCoords.y);
+                        } else {
+                            // Smooth area: use cubic for smoothness
+                            color = this.sampleCubic(cartCoords.x, cartCoords.y);
+                        }
+                        
+                        const targetIndex = (y * width + x) * 4;
+                        hexData.data[targetIndex] = Math.max(0, Math.min(255, color.r));
+                        hexData.data[targetIndex + 1] = Math.max(0, Math.min(255, color.g));
+                        hexData.data[targetIndex + 2] = Math.max(0, Math.min(255, color.b));
+                        hexData.data[targetIndex + 3] = Math.max(0, Math.min(255, color.a));
+                    }
+                }
+                
+                return hexData;
+            }
+            
+            // Helper sampling functions
+            sampleBilinear(x, y) {
+                const width = this.imageData.width;
+                const height = this.imageData.height;
+                
+                if (x < 0 || x >= width - 1 || y < 0 || y >= height - 1) {
+                    return { r: 0, g: 0, b: 0, a: 0 };
+                }
+                
+                const x0 = Math.floor(x), y0 = Math.floor(y);
+                const x1 = x0 + 1, y1 = y0 + 1;
+                const fx = x - x0, fy = y - y0;
+                
+                const getPixel = (px, py) => {
+                    const index = (py * width + px) * 4;
+                    return {
+                        r: this.imageData.data[index],
+                        g: this.imageData.data[index + 1],
+                        b: this.imageData.data[index + 2],
+                        a: this.imageData.data[index + 3]
+                    };
+                };
+                
+                const c00 = getPixel(x0, y0), c10 = getPixel(x1, y0);
+                const c01 = getPixel(x0, y1), c11 = getPixel(x1, y1);
+                
+                return {
+                    r: c00.r * (1 - fx) * (1 - fy) + c10.r * fx * (1 - fy) + c01.r * (1 - fx) * fy + c11.r * fx * fy,
+                    g: c00.g * (1 - fx) * (1 - fy) + c10.g * fx * (1 - fy) + c01.g * (1 - fx) * fy + c11.g * fx * fy,
+                    b: c00.b * (1 - fx) * (1 - fy) + c10.b * fx * (1 - fy) + c01.b * (1 - fx) * fy + c11.b * fx * fy,
+                    a: c00.a * (1 - fx) * (1 - fy) + c10.a * fx * (1 - fy) + c01.a * (1 - fx) * fy + c11.a * fx * fy
+                };
+            }
+            
+            sampleLanczos(x, y, a) {
+                const width = this.imageData.width;
+                const height = this.imageData.height;
+                
+                const lanczos = (x) => {
+                    if (x === 0) return 1;
+                    if (Math.abs(x) >= a) return 0;
+                    return (a * Math.sin(Math.PI * x) * Math.sin(Math.PI * x / a)) / (Math.PI * Math.PI * x * x);
+                };
+                
+                let totalR = 0, totalG = 0, totalB = 0, totalA = 0, totalWeight = 0;
+                
+                const x0 = Math.floor(x - a + 1);
+                const y0 = Math.floor(y - a + 1);
+                const x1 = Math.floor(x + a);
+                const y1 = Math.floor(y + a);
+                
+                for (let py = y0; py <= y1; py++) {
+                    for (let px = x0; px <= x1; px++) {
+                        if (px >= 0 && px < width && py >= 0 && py < height) {
+                            const wx = lanczos(x - px);
+                            const wy = lanczos(y - py);
+                            const weight = wx * wy;
+                            
+                            const index = (py * width + px) * 4;
+                            totalR += this.imageData.data[index] * weight;
+                            totalG += this.imageData.data[index + 1] * weight;
+                            totalB += this.imageData.data[index + 2] * weight;
+                            totalA += this.imageData.data[index + 3] * weight;
+                            totalWeight += weight;
+                        }
+                    }
+                }
+                
+                return totalWeight > 0 ? {
+                    r: totalR / totalWeight,
+                    g: totalG / totalWeight,
+                    b: totalB / totalWeight,
+                    a: totalA / totalWeight
+                } : { r: 0, g: 0, b: 0, a: 0 };
+            }
+            
+            sampleCubic(x, y) {
+                // Bicubic interpolation
+                const width = this.imageData.width;
+                const height = this.imageData.height;
+                
+                const cubic = (t) => {
+                    const a = -0.5;
+                    const absT = Math.abs(t);
+                    if (absT <= 1) return (a + 2) * absT * absT * absT - (a + 3) * absT * absT + 1;
+                    if (absT <= 2) return a * absT * absT * absT - 5 * a * absT * absT + 8 * a * absT - 4 * a;
+                    return 0;
+                };
+                
+                let totalR = 0, totalG = 0, totalB = 0, totalA = 0, totalWeight = 0;
+                
+                const x0 = Math.floor(x) - 1;
+                const y0 = Math.floor(y) - 1;
+                
+                for (let py = 0; py < 4; py++) {
+                    for (let px = 0; px < 4; px++) {
+                        const sx = x0 + px;
+                        const sy = y0 + py;
+                        
+                        if (sx >= 0 && sx < width && sy >= 0 && sy < height) {
+                            const wx = cubic(x - sx);
+                            const wy = cubic(y - sy);
+                            const weight = wx * wy;
+                            
+                            const index = (sy * width + sx) * 4;
+                            totalR += this.imageData.data[index] * weight;
+                            totalG += this.imageData.data[index + 1] * weight;
+                            totalB += this.imageData.data[index + 2] * weight;
+                            totalA += this.imageData.data[index + 3] * weight;
+                            totalWeight += weight;
+                        }
+                    }
+                }
+                
+                return totalWeight > 0 ? {
+                    r: totalR / totalWeight,
+                    g: totalG / totalWeight,
+                    b: totalB / totalWeight,
+                    a: totalA / totalWeight
+                } : { r: 0, g: 0, b: 0, a: 0 };
+            }
+            
+            detectEdge(x, y) {
+                // Sobel edge detection
+                const width = this.imageData.width;
+                const height = this.imageData.height;
+                
+                const getGray = (px, py) => {
+                    if (px < 0 || px >= width || py < 0 || py >= height) return 0;
+                    const index = (py * width + px) * 4;
+                    return (this.imageData.data[index] + this.imageData.data[index + 1] + this.imageData.data[index + 2]) / 3;
+                };
+                
+                const x0 = Math.floor(x), y0 = Math.floor(y);
+                
+                // Sobel kernels
+                const sobelX = [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]];
+                const sobelY = [[-1, -2, -1], [0, 0, 0], [1, 2, 1]];
+                
+                let gx = 0, gy = 0;
+                
+                for (let dy = -1; dy <= 1; dy++) {
+                    for (let dx = -1; dx <= 1; dx++) {
+                        const gray = getGray(x0 + dx, y0 + dy);
+                        gx += gray * sobelX[dy + 1][dx + 1];
+                        gy += gray * sobelY[dy + 1][dx + 1];
+                    }
+                }
+                
+                return Math.sqrt(gx * gx + gy * gy) / 255;
+            }
+            
+            cartesianToHex(x, y, hexHeight) {
+                const q = (2/3) * x;
+                const r = (-1/3) * x + (Math.sqrt(3)/3) * y;
+                return { q: Math.round(q), r: Math.round(r) };
+            }
+            
+            hexToCartesian(q, r, hexHeight) {
+                const x = (3/2) * q;
+                const y = (Math.sqrt(3)/2) * q + Math.sqrt(3) * r;
+                return { x, y };
+            }
+            
+            downloadHexaImage() {
+                if (!this.hexImageData) {
+                    this.logger.log('WARN', 'No hexagonal image to download');
+                    return;
+                }
+                
+                this.logger.log('INFO', 'Starting HXI download');
+                
+                const metadata = {
+                    algorithm: this.algorithm,
+                    sourceFile: this.currentFile ? this.currentFile.name : 'unknown',
+                    processingDate: new Date().toISOString()
+                };
+                
+                const { data, header } = this.hexFormat.compress(this.hexImageData, metadata);
+                
+                const blob = new Blob([data], { type: 'application/octet-stream' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `heximage_${Date.now()}.hxi`;
+                a.click();
+                
+                URL.revokeObjectURL(url);
+                
+                this.logger.log('SUCCESS', `HXI file downloaded: ${header.compressionRatio}% compression ratio`);
+            }
+            
+            resetView() {
+                if (!this.originalImage) return;
+                
+                const containerWidth = this.container1.clientWidth;
+                const containerHeight = this.container1.clientHeight;
+                
+                const imageAspect = this.originalImage.naturalWidth / this.originalImage.naturalHeight;
+                const containerAspect = containerWidth / containerHeight;
+                
+                if (imageAspect > containerAspect) {
+                    this.zoom = containerWidth / this.originalImage.naturalWidth;
+                } else {
+                    this.zoom = containerHeight / this.originalImage.naturalHeight;
+                }
+                
+                this.pan.x = (containerWidth - this.originalImage.naturalWidth * this.zoom) / 2;
+                this.pan.y = (containerHeight - this.originalImage.naturalHeight * this.zoom) / 2;
+                
+                this.updateDisplay();
+                document.getElementById('zoomInfo').textContent = `Zoom: ${Math.round(this.zoom * 100)}%`;
+            }
+            
+            updateDisplay() {
+                if (!this.originalImage) return;
+                
+                // Clear canvases
+                this.ctx1.clearRect(0, 0, this.canvas1.width, this.canvas1.height);
+                this.ctx2.clearRect(0, 0, this.canvas2.width, this.canvas2.height);
+                
+                // Draw original image
+                this.ctx1.save();
+                this.ctx1.translate(this.pan.x, this.pan.y);
+                this.ctx1.scale(this.zoom, this.zoom);
+                this.ctx1.drawImage(this.originalImage, 0, 0);
+                this.ctx1.restore();
+                
+                // Draw hexagonal image
+                if (this.hexImageData) {
+                    const tempCanvas = document.createElement('canvas');
+                    const tempCtx = tempCanvas.getContext('2d');
+                    tempCanvas.width = this.hexImageData.width;
+                    tempCanvas.height = this.hexImageData.height;
+                    tempCtx.putImageData(this.hexImageData, 0, 0);
+                    
+                    this.ctx2.save();
+                    this.ctx2.translate(this.pan.x, this.pan.y);
+                    this.ctx2.scale(this.zoom, this.zoom);
+                    this.ctx2.drawImage(tempCanvas, 0, 0);
+                    this.ctx2.restore();
+                }
+                
+                // Draw grids if enabled and zoomed in enough
+                if (this.showGrid && this.zoom >= 8) {
+                    this.drawGrids();
+                }
+            }
+            
+            drawGrids() {
+                const gridSize = Math.max(8, this.zoom * 2);
+                
+                // Clear grids
+                this.gridCtx1.clearRect(0, 0, this.grid1.width, this.grid1.height);
+                this.gridCtx2.clearRect(0, 0, this.grid2.width, this.grid2.height);
+                
+                // Orthogonal grid
+                this.gridCtx1.strokeStyle = '#22c55e';
+                this.gridCtx1.lineWidth = 0.8;
+                this.gridCtx1.globalAlpha = 0.6;
+                
+                for (let x = this.pan.x % gridSize; x < this.canvas1.width; x += gridSize) {
+                    this.gridCtx1.beginPath();
+                    this.gridCtx1.moveTo(x, 0);
+                    this.gridCtx1.lineTo(x, this.canvas1.height);
+                    this.gridCtx1.stroke();
+                }
+                
+                for (let y = this.pan.y % gridSize; y < this.canvas1.height; y += gridSize) {
+                    this.gridCtx1.beginPath();
+                    this.gridCtx1.moveTo(0, y);
+                    this.gridCtx1.lineTo(this.canvas1.width, y);
+                    this.gridCtx1.stroke();
+                }
+                
+                // Hexagonal grid
+                this.gridCtx2.strokeStyle = '#22c55e';
+                this.gridCtx2.lineWidth = 0.8;
+                this.gridCtx2.globalAlpha = 0.6;
+                
+                const hexRadius = gridSize * 0.6;
+                const hexHeight = Math.sqrt(3) / 2 * hexRadius;
+                
+                for (let row = -3; row < this.canvas2.height / hexHeight + 3; row++) {
+                    for (let col = -3; col < this.canvas2.width / (hexRadius * 1.5) + 3; col++) {
+                        const x = this.pan.x + col * hexRadius * 1.5;
+                        const y = this.pan.y + row * hexHeight * 2 + (col % 2) * hexHeight;
+                        
+                        if (x > -hexRadius && x < this.canvas2.width + hexRadius && 
+                            y > -hexRadius && y < this.canvas2.height + hexRadius) {
+                            this.drawHexagon(this.gridCtx2, x, y, hexRadius);
+                        }
+                    }
+                }
+                
+                this.gridCtx1.globalAlpha = 1;
+                this.gridCtx2.globalAlpha = 1;
+            }
+            
+            drawHexagon(ctx, centerX, centerY, radius) {
+                ctx.beginPath();
+                for (let i = 0; i < 6; i++) {
+                    const angle = (Math.PI / 3) * i;
+                    const x = centerX + radius * Math.cos(angle);
+                    const y = centerY + radius * Math.sin(angle);
+                    
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.closePath();
+                ctx.stroke();
+            }
+            
+            resizeCanvases() {
+                const containers = [this.container1, this.container2];
+                const canvases = [this.canvas1, this.canvas2];
+                const grids = [this.grid1, this.grid2];
+                
+                containers.forEach((container, index) => {
+                    const rect = container.getBoundingClientRect();
+                    const canvas = canvases[index];
+                    const grid = grids[index];
+                    
+                    canvas.width = rect.width;
+                    canvas.height = rect.height;
+                    canvas.style.width = rect.width + 'px';
+                    canvas.style.height = rect.height + 'px';
+                    
+                    grid.width = rect.width;
+                    grid.height = rect.height;
+                    grid.style.width = rect.width + 'px';
+                    grid.style.height = rect.height + 'px';
+                });
+            }
+        }
+        
+        // Global functions
+        function toggleDebugPanel() {
+            const panel = document.getElementById('debugPanel');
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        }
+        
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            const viewer = new HexagonalImageViewer();
+            
+            // Global access for debugging
+            window.hexViewer = viewer;
+            window.exportLogs = () => {
+                const logs = viewer.logger.exportLogs();
+                const blob = new Blob([logs], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'hex-viewer-debug-log.json';
+                a.click();
+                URL.revokeObjectURL(url);
+            };
+        });
+    </script>
+</body>
+</html>
