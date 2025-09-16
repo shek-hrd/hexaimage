@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HexaImage - CCD to Hexagonal Grid Converter</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <h1>🔬 HexaImage Converter</h1>
+        <p>Convert CCD orthogonal raw data to hexagonal grid format</p>
+    </header>
+
+    <main>
+        <!-- Algorithm Description Section -->
+        <section class="description-section">
+            <div class="description-card">
+                <h2>📚 Algorithm Overview</h2>
+                <div class="description-content">
+                    <h3>CCD to Hexagonal Grid Conversion</h3>
+                    <p>This converter implements a specialized image format that reinterprets CCD sensor measurements from orthogonal (rectangular) grid to hexagonal grid arrangement.</p>
+                    
+                    <div class="algorithm-details">
+                        <h4>🔄 Conversion Process:</h4>
+                        <ol>
+                            <li><strong>3×3 Sampling Window:</strong> For each hexagonal pixel, we sample a 3×3 orthogonal window from the raw CCD data</li>
+                            <li><strong>Center Pixel Weight:</strong> The center pixel of the 3×3 window contributes 50% of the hexagonal pixel's color value</li>
+                            <li><strong>Outer Pixels Weight:</strong> The 8 surrounding pixels collectively contribute the remaining 50% (6.25% each)</li>
+                            <li><strong>Overlapping Windows:</strong> Each 3×3 window overlaps with neighboring windows, creating smooth color interpolation</li>
+                            <li><strong>Step Size:</strong> Windows advance with step size of 1, ensuring maximum overlap and information preservation</li>
+                        </ol>
+                        
+                        <h4>🎯 Mathematical Formula:</h4>
+                        <div class="formula">
+                            <code>HexPixel(x,y) = 0.5 × Center + 0.5 × (Σ(Outer8) / 8)</code>
+                        </div>
+                        
+                        <h4>📐 Hexagonal Grid Properties:</h4>
+                        <ul>
+                            <li>Each hexagonal pixel has 6 neighbors instead of 8 (rectangular)</li>
+                            <li>Improved isotropy in spatial frequency response</li>
+                            <li>Better suited for certain vision processing tasks</li>
+                            <li>15% fewer pixels than equivalent rectangular grid</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Upload Section -->
+        <section class="upload-section">
+            <div class="upload-card">
+                <div class="drop-zone" id="dropZone">
+                    <div class="drop-zone-content">
+                        <div class="upload-icon">📁</div>
+                        <h3>Drop your raw image here</h3>
+                        <p>or click to browse files</p>
+                        <input type="file" id="fileInput" accept="image/*" hidden>
+                    </div>
+                </div>
+                <div class="upload-info">
+                    <small>Supported formats: PNG, JPEG, BMP, TIFF, WebP</small>
+                </div>
+            </div>
+        </section>
+
+        <!-- Processing Status -->
+        <section class="status-section" id="statusSection" style="display: none;">
+            <div class="status-card">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <p id="statusText">Processing image...</p>
+            </div>
+        </section>
+
+        <!-- Results Section -->
+        <section class="results-section" id="resultsSection" style="display: none;">
+            <div class="results-header">
+                <h2>📊 Conversion Results</h2>
+                <div class="controls">
+                    <button id="downloadBtn" class="download-btn">💾 Download Hexagonal Image</button>
+                    <button id="resetBtn" class="reset-btn">🔄 Process New Image</button>
+                </div>
+            </div>
+
+            <div class="viewers-container">
+                <!-- Original Image Viewer -->
+                <div class="viewer-card">
+                    <h3>📷 Original Orthogonal (CCD Raw)</h3>
+                    <div class="viewer-container">
+                        <canvas id="originalCanvas" class="image-canvas"></canvas>
+                        <div class="viewer-controls">
+                            <div class="zoom-controls">
+                                <button id="zoomOutOriginal">🔍-</button>
+                                <span id="zoomLevelOriginal">100%</span>
+                                <button id="zoomInOriginal">🔍+</button>
+                            </div>
+                            <button id="resetViewOriginal">🎯 Reset View</button>
+                        </div>
+                    </div>
+                    <div class="image-info">
+                        <p id="originalInfo">Resolution: - × -</p>
+                    </div>
+                </div>
+
+                <!-- Hexagonal Image Viewer -->
+                <div class="viewer-card">
+                    <h3>⬢ Hexagonal Grid Result</h3>
+                    <div class="viewer-container">
+                        <canvas id="hexCanvas" class="image-canvas"></canvas>
+                        <div class="viewer-controls">
+                            <div class="zoom-controls">
+                                <button id="zoomOutHex">🔍-</button>
+                                <span id="zoomLevelHex">100%</span>
+                                <button id="zoomInHex">🔍+</button>
+                            </div>
+                            <button id="resetViewHex">🎯 Reset View</button>
+                        </div>
+                    </div>
+                    <div class="image-info">
+                        <p id="hexInfo">Hexagonal pixels: - × -</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Processing Details -->
+            <div class="details-section">
+                <div class="details-card">
+                    <h3>📈 Processing Details</h3>
+                    <div class="details-grid">
+                        <div class="detail-item">
+                            <label>Original Size:</label>
+                            <span id="originalSize">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <label>Hex Grid Size:</label>
+                            <span id="hexSize">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <label>Processing Time:</label>
+                            <span id="processingTime">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <label>Compression Ratio:</label>
+                            <span id="compressionRatio">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2024 HexaImage Converter - Advanced CCD Data Processing</p>
+    </footer>
+
+    <script src="hexaimage.js"></script>
+</body>
+</html>
