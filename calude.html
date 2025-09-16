@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HexaImage Viewer Pro</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            background: #0a1a0a;
+            color: #4ade80;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        .header {
+            background: #0f2715;
+            padding: 8px 12px;
+            border-bottom: 1px solid #22c55e;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            font-size: 10px;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+        }
+
+        .file-input {
+            position: absolute;
+            left: -9999px;
+        }
+
+        .file-label {
+            background: #166534;
+            color: #dcfce7;
+            padding: 4px 8px;
+            cursor: pointer;
+            border-radius: 2px;
+            border: 1px solid #22c55e;
+            font-size: 10px;
+        }
+
+        .file-label:hover {
+            background: #22c55e;
+            color: #0a1a0a;
+        }
+
+        .controls {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        select, button {
+            background: #166534;
+            color: #dcfce7;
+            border: 1px solid #22c55e;
+            padding: 3px 6px;
+            font-size: 10px;
+            cursor: pointer;
+            border-radius: 2px;
+        }
+
+        button:hover, select:hover {
+            background: #22c55e;
+            color: #0a1a0a;
+        }
+
+        button:disabled {
+            background: #064e3b;
+            color: #166534;
+            cursor: not-allowed;
+        }
+
+        .info {
+            margin-left: auto;
+            font-size: 9px;
+            color: #86efac;
+        }
+
+        .viewer-container {
+            flex: 1;
+            display: flex;
+            background: #0a1a0a;
+        }
+
+        .viewer-pane {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            border-right: 1px solid #22c55e;
+        }
+
+        .viewer-pane:last-child {
+            border-right: none;
+        }
+
+        .viewer-title {
+            position: absolute;
+            top: 4px;
+            left: 8px;
+            background: rgba(15, 39, 21, 0.9);
+            padding: 2px 6px;
+            border-radius: 2px;
+            font-size: 9px;
+            z-index: 10;
+            border: 1px solid #22c55e;
+        }
+
+        .canvas-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            overflow: hidden;
+            cursor: grab;
+        }
+
+        .canvas-container:active {
+            cursor: grabbing;
+        }
+
+        canvas {
+            position: absolute;
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+
+        .grid-overlay {
+            position: absolute;
+            pointer-events: none;
+            opacity: 0.3;
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(15, 39, 21, 0.95);
+            padding: 12px 20px;
+            border-radius: 4px;
+            border: 1px solid #22c55e;
+            font-size: 11px;
+        }
+
+        .status-bar {
+            background: #0f2715;
+            padding: 4px 12px;
+            border-top: 1px solid #22c55e;
+            font-size: 9px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        @media (max-width: 768px) {
+            .viewer-container {
+                flex-direction: column;
+            }
+            
+            .viewer-pane {
+                border-right: none;
+                border-bottom: 1px solid #22c55e;
+            }
+            
+            .viewer-pane:last-child {
+                border-bottom: none;
+            }
+            
+            .header {
+                font-size: 9px;
+            }
+            
+            .controls {
+                font-size: 9px;
+            }
+        }
+
+        .performance-indicator {
+            color: #86efac;
+            font-size: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="file-input-wrapper">
+                <input type="file" id="fileInput" class="file-input" accept="image/*,.raw,.rw2,.cr2,.nef,.orf,.dng,.arw,.pef,.x3f">
+                <label for="fileInput" class="file-label">Load Image</label>
+            </div>
+            
+            <div class="controls">
+                <label>Algorithm:</label>
+                <select id="algorithmSelect">
+                    <option value="bilinear">Bilinear (Fast)</option>
+                    <option value="nearest">Nearest (Performance)</option>
+                    <option value="subpixel">Hexagonal Sub-pixel</option>
+                </select>
+                
+                <button id="resetView">Reset View</button>
+                <button id="toggleSync" class="active">Sync Views</button>
+                <button id="toggleGrid">Grid: Off</button>
+            </div>
+            
+            <div class="info">
+                <span id="imageInfo">No image loaded</span>
+            </div>
+        </div>
+
+        <div class="viewer-container">
+            <div class="viewer-pane">
+                <div class="viewer-title">Original (Orthogonal)</div>
+                <div class="canvas-container" id="container1">
+                    <canvas id="canvas1"></canvas>
+                    <canvas class="grid-overlay" id="grid1"></canvas>
+                </div>
+            </div>
+            
+            <div class="viewer-pane">
+                <div class="viewer-title">Hexagonal Projection</div>
+                <div class="canvas-container" id="container2">
+                    <canvas id="canvas2"></canvas>
+                    <canvas class="grid-overlay" id="grid2"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="status-bar">
+            <span id="statusText">Ready</span>
+            <span id="zoomInfo">Zoom: 100%</span>
+            <span class="performance-indicator" id="perfInfo"></span>
+        </div>
+    </div>
+
+    <script>
+        class HexagonalImageViewer {
+            constructor() {
+                this.canvas1 = document.getElementById('canvas1');
+                this.canvas2 = document.getElementById('canvas2');
+                this.ctx1 = this.canvas1.getContext('2d');
+                this.ctx2 = this.canvas2.getContext('2d');
+                this.grid1 = document.getElementById('grid1');
+                this.grid2 = document.getElementById('grid2');
+                this.gridCtx1 = this.grid1.getContext('2d');
+                this.gridCtx2 = this.grid2.getContext('2d');
+                
+                this.container1 = document.getElementById('container1');
+                this.container2 = document.getElementById('container2');
+                
+                this.originalImage = null;
+                this.imageData = null;
+                this.hexImageData = null;
+                
+                this.zoom = 1;
+                this.maxZoom = 32;
+                this.minZoom = 0.1;
+                this.pan = { x: 0, y: 0 };
+                
+                this.syncViews = true;
+                this.showGrid = false;
+                this.algorithm = 'bilinear';
+                
+                this.isDragging = false;
+                this.lastMouse = { x: 0, y: 0 };
+                
+                this.setupEventListeners();
+                this.setupUI();
+                this.resizeCanvases();
+            }
+            
+            setupEventListeners() {
+                document.getElementById('fileInput').addEventListener('change', (e) => {
+                    this.loadImage(e.target.files[0]);
+                });
+                
+                document.getElementById('algorithmSelect').addEventListener('change', (e) => {
+                    this.algorithm = e.target.value;
+                    this.processImage();
+                });
+                
+                document.getElementById('resetView').addEventListener('click', () => {
+                    this.resetView();
+                });
+                
+                document.getElementById('toggleSync').addEventListener('click', (e) => {
+                    this.syncViews = !this.syncViews;
+                    e.target.textContent = this.syncViews ? 'Sync: On' : 'Sync: Off';
+                    e.target.style.background = this.syncViews ? '#22c55e' : '#166534';
+                    e.target.style.color = this.syncViews ? '#0a1a0a' : '#dcfce7';
+                });
+                
+                document.getElementById('toggleGrid').addEventListener('click', (e) => {
+                    this.showGrid = !this.showGrid;
+                    e.target.textContent = this.showGrid ? 'Grid: On' : 'Grid: Off';
+                    this.updateDisplay();
+                });
+                
+                // Mouse events for both containers
+                [this.container1, this.container2].forEach((container, index) => {
+                    this.setupMouseEvents(container, index);
+                });
+                
+                window.addEventListener('resize', () => {
+                    this.resizeCanvases();
+                    this.updateDisplay();
+                });
+            }
+            
+            setupMouseEvents(container, index) {
+                container.addEventListener('mousedown', (e) => {
+                    this.isDragging = true;
+                    this.lastMouse = { x: e.clientX, y: e.clientY };
+                    e.preventDefault();
+                });
+                
+                container.addEventListener('mousemove', (e) => {
+                    if (this.isDragging) {
+                        const deltaX = e.clientX - this.lastMouse.x;
+                        const deltaY = e.clientY - this.lastMouse.y;
+                        
+                        this.pan.x += deltaX / this.zoom;
+                        this.pan.y += deltaY / this.zoom;
+                        
+                        this.lastMouse = { x: e.clientX, y: e.clientY };
+                        this.updateDisplay();
+                    }
+                });
+                
+                container.addEventListener('mouseup', () => {
+                    this.isDragging = false;
+                });
+                
+                container.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    
+                    const rect = container.getBoundingClientRect();
+                    const mouseX = e.clientX - rect.left;
+                    const mouseY = e.clientY - rect.top;
+                    
+                    const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+                    const newZoom = Math.max(this.minZoom, Math.min(this.maxZoom, this.zoom * zoomFactor));
+                    
+                    if (newZoom !== this.zoom) {
+                        const zoomRatio = newZoom / this.zoom;
+                        this.pan.x = mouseX + (this.pan.x - mouseX) * zoomRatio;
+                        this.pan.y = mouseY + (this.pan.y - mouseY) * zoomRatio;
+                        this.zoom = newZoom;
+                        
+                        this.updateDisplay();
+                        document.getElementById('zoomInfo').textContent = `Zoom: ${Math.round(this.zoom * 100)}%`;
+                    }
+                });
+            }
+            
+            setupUI() {
+                // Additional UI setup if needed
+            }
+            
+            async loadImage(file) {
+                if (!file) return;
+                
+                document.getElementById('statusText').textContent = 'Loading image...';
+                
+                try {
+                    const url = URL.createObjectURL(file);
+                    const img = new Image();
+                    
+                    img.onload = () => {
+                        this.originalImage = img;
+                        this.extractImageData();
+                        this.resetView();
+                        this.processImage();
+                        
+                        document.getElementById('imageInfo').textContent = 
+                            `${img.naturalWidth}×${img.naturalHeight} | ${(file.size / 1024 / 1024).toFixed(2)}MB`;
+                        document.getElementById('statusText').textContent = 'Image loaded successfully';
+                        
+                        URL.revokeObjectURL(url);
+                    };
+                    
+                    img.onerror = () => {
+                        document.getElementById('statusText').textContent = 'Failed to load image';
+                        URL.revokeObjectURL(url);
+                    };
+                    
+                    img.src = url;
+                    
+                } catch (error) {
+                    console.error('Error loading image:', error);
+                    document.getElementById('statusText').textContent = 'Error loading image';
+                }
+            }
+            
+            extractImageData() {
+                if (!this.originalImage) return;
+                
+                const tempCanvas = document.createElement('canvas');
+                const tempCtx = tempCanvas.getContext('2d');
+                
+                tempCanvas.width = this.originalImage.naturalWidth;
+                tempCanvas.height = this.originalImage.naturalHeight;
+                
+                tempCtx.drawImage(this.originalImage, 0, 0);
+                this.imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+            }
+            
+            processImage() {
+                if (!this.imageData) return;
+                
+                const startTime = performance.now();
+                
+                switch (this.algorithm) {
+                    case 'nearest':
+                        this.hexImageData = this.createHexImageNearest();
+                        break;
+                    case 'bilinear':
+                        this.hexImageData = this.createHexImageBilinear();
+                        break;
+                    case 'subpixel':
+                        this.hexImageData = this.createHexImageSubpixel();
+                        break;
+                }
+                
+                const processingTime = performance.now() - startTime;
+                document.getElementById('perfInfo').textContent = `Processed in ${processingTime.toFixed(1)}ms`;
+                
+                this.updateDisplay();
+            }
+            
+            createHexImageNearest() {
+                const width = this.imageData.width;
+                const height = this.imageData.height;
+                const hexData = new ImageData(width, height);
+                
+                const hexHeight = Math.sqrt(3) / 2;
+                
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const hexCoords = this.cartesianToHex(x, y, hexHeight);
+                        const cartCoords = this.hexToCartesian(hexCoords.q, hexCoords.r, hexHeight);
+                        
+                        const sourceX = Math.round(cartCoords.x);
+                        const sourceY = Math.round(cartCoords.y);
+                        
+                        if (sourceX >= 0 && sourceX < width && sourceY >= 0 && sourceY < height) {
+                            const sourceIndex = (sourceY * width + sourceX) * 4;
+                            const targetIndex = (y * width + x) * 4;
+                            
+                            hexData.data[targetIndex] = this.imageData.data[sourceIndex];
+                            hexData.data[targetIndex + 1] = this.imageData.data[sourceIndex + 1];
+                            hexData.data[targetIndex + 2] = this.imageData.data[sourceIndex + 2];
+                            hexData.data[targetIndex + 3] = this.imageData.data[sourceIndex + 3];
+                        }
+                    }
+                }
+                
+                return hexData;
+            }
+            
+            createHexImageBilinear() {
+                const width = this.imageData.width;
+                const height = this.imageData.height;
+                const hexData = new ImageData(width, height);
+                
+                const hexHeight = Math.sqrt(3) / 2;
+                
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const hexCoords = this.cartesianToHex(x, y, hexHeight);
+                        const cartCoords = this.hexToCartesian(hexCoords.q, hexCoords.r, hexHeight);
+                        
+                        const color = this.sampleBilinear(cartCoords.x, cartCoords.y);
+                        const targetIndex = (y * width + x) * 4;
+                        
+                        hexData.data[targetIndex] = color.r;
+                        hexData.data[targetIndex + 1] = color.g;
+                        hexData.data[targetIndex + 2] = color.b;
+                        hexData.data[targetIndex + 3] = color.a;
+                    }
+                }
+                
+                return hexData;
+            }
+            
+            createHexImageSubpixel() {
+                const width = this.imageData.width;
+                const height = this.imageData.height;
+                const hexData = new ImageData(width, height);
+                
+                const hexRadius = 0.7; // Smaller hexagonal pixels
+                const hexHeight = Math.sqrt(3) / 2;
+                
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        // Create multiple sub-hexagonal samples
+                        let totalR = 0, totalG = 0, totalB = 0, totalA = 0;
+                        let sampleCount = 0;
+                        
+                        // Sample in a hexagonal pattern around the pixel
+                        for (let dy = -1; dy <= 1; dy++) {
+                            for (let dx = -1; dx <= 1; dx++) {
+                                const sampleX = x + dx * hexRadius;
+                                const sampleY = y + dy * hexRadius;
+                                
+                                const hexCoords = this.cartesianToHex(sampleX, sampleY, hexHeight);
+                                const cartCoords = this.hexToCartesian(hexCoords.q, hexCoords.r, hexHeight);
+                                
+                                const color = this.sampleBilinear(cartCoords.x, cartCoords.y);
+                                
+                                // Weight based on distance from center
+                                const weight = Math.max(0, 1 - Math.sqrt(dx * dx + dy * dy) / 2);
+                                
+                                totalR += color.r * weight;
+                                totalG += color.g * weight;
+                                totalB += color.b * weight;
+                                totalA += color.a * weight;
+                                sampleCount += weight;
+                            }
+                        }
+                        
+                        const targetIndex = (y * width + x) * 4;
+                        
+                        if (sampleCount > 0) {
+                            hexData.data[targetIndex] = Math.round(totalR / sampleCount);
+                            hexData.data[targetIndex + 1] = Math.round(totalG / sampleCount);
+                            hexData.data[targetIndex + 2] = Math.round(totalB / sampleCount);
+                            hexData.data[targetIndex + 3] = Math.round(totalA / sampleCount);
+                        }
+                    }
+                }
+                
+                return hexData;
+            }
+            
+            cartesianToHex(x, y, hexHeight) {
+                const q = (2/3) * x;
+                const r = (-1/3) * x + (Math.sqrt(3)/3) * y;
+                return { q: Math.round(q), r: Math.round(r) };
+            }
+            
+            hexToCartesian(q, r, hexHeight) {
+                const x = (3/2) * q;
+                const y = (Math.sqrt(3)/2) * q + Math.sqrt(3) * r;
+                return { x, y };
+            }
+            
+            sampleBilinear(x, y) {
+                const width = this.imageData.width;
+                const height = this.imageData.height;
+                
+                if (x < 0 || x >= width - 1 || y < 0 || y >= height - 1) {
+                    return { r: 0, g: 0, b: 0, a: 0 };
+                }
+                
+                const x0 = Math.floor(x);
+                const y0 = Math.floor(y);
+                const x1 = x0 + 1;
+                const y1 = y0 + 1;
+                
+                const fx = x - x0;
+                const fy = y - y0;
+                
+                const getPixel = (px, py) => {
+                    const index = (py * width + px) * 4;
+                    return {
+                        r: this.imageData.data[index],
+                        g: this.imageData.data[index + 1],
+                        b: this.imageData.data[index + 2],
+                        a: this.imageData.data[index + 3]
+                    };
+                };
+                
+                const c00 = getPixel(x0, y0);
+                const c10 = getPixel(x1, y0);
+                const c01 = getPixel(x0, y1);
+                const c11 = getPixel(x1, y1);
+                
+                return {
+                    r: Math.round(
+                        c00.r * (1 - fx) * (1 - fy) +
+                        c10.r * fx * (1 - fy) +
+                        c01.r * (1 - fx) * fy +
+                        c11.r * fx * fy
+                    ),
+                    g: Math.round(
+                        c00.g * (1 - fx) * (1 - fy) +
+                        c10.g * fx * (1 - fy) +
+                        c01.g * (1 - fx) * fy +
+                        c11.g * fx * fy
+                    ),
+                    b: Math.round(
+                        c00.b * (1 - fx) * (1 - fy) +
+                        c10.b * fx * (1 - fy) +
+                        c01.b * (1 - fx) * fy +
+                        c11.b * fx * fy
+                    ),
+                    a: Math.round(
+                        c00.a * (1 - fx) * (1 - fy) +
+                        c10.a * fx * (1 - fy) +
+                        c01.a * (1 - fx) * fy +
+                        c11.a * fx * fy
+                    )
+                };
+            }
+            
+            resetView() {
+                if (!this.originalImage) return;
+                
+                const containerWidth = this.container1.clientWidth;
+                const containerHeight = this.container1.clientHeight;
+                
+                const imageAspect = this.originalImage.naturalWidth / this.originalImage.naturalHeight;
+                const containerAspect = containerWidth / containerHeight;
+                
+                if (imageAspect > containerAspect) {
+                    this.zoom = containerWidth / this.originalImage.naturalWidth;
+                } else {
+                    this.zoom = containerHeight / this.originalImage.naturalHeight;
+                }
+                
+                this.pan.x = (containerWidth - this.originalImage.naturalWidth * this.zoom) / 2;
+                this.pan.y = (containerHeight - this.originalImage.naturalHeight * this.zoom) / 2;
+                
+                this.updateDisplay();
+                document.getElementById('zoomInfo').textContent = `Zoom: ${Math.round(this.zoom * 100)}%`;
+            }
+            
+            updateDisplay() {
+                if (!this.originalImage) return;
+                
+                // Clear canvases
+                this.ctx1.clearRect(0, 0, this.canvas1.width, this.canvas1.height);
+                this.ctx2.clearRect(0, 0, this.canvas2.width, this.canvas2.height);
+                
+                // Draw original image
+                this.ctx1.save();
+                this.ctx1.translate(this.pan.x, this.pan.y);
+                this.ctx1.scale(this.zoom, this.zoom);
+                this.ctx1.drawImage(this.originalImage, 0, 0);
+                this.ctx1.restore();
+                
+                // Draw hexagonal image
+                if (this.hexImageData) {
+                    const tempCanvas = document.createElement('canvas');
+                    const tempCtx = tempCanvas.getContext('2d');
+                    tempCanvas.width = this.hexImageData.width;
+                    tempCanvas.height = this.hexImageData.height;
+                    tempCtx.putImageData(this.hexImageData, 0, 0);
+                    
+                    this.ctx2.save();
+                    this.ctx2.translate(this.pan.x, this.pan.y);
+                    this.ctx2.scale(this.zoom, this.zoom);
+                    this.ctx2.drawImage(tempCanvas, 0, 0);
+                    this.ctx2.restore();
+                }
+                
+                // Draw grids if enabled and at max zoom
+                if (this.showGrid && this.zoom >= this.maxZoom * 0.8) {
+                    this.drawGrids();
+                }
+            }
+            
+            drawGrids() {
+                const gridSize = Math.max(8, this.zoom);
+                
+                // Clear grids
+                this.gridCtx1.clearRect(0, 0, this.grid1.width, this.grid1.height);
+                this.gridCtx2.clearRect(0, 0, this.grid2.width, this.grid2.height);
+                
+                // Orthogonal grid
+                this.gridCtx1.strokeStyle = '#22c55e';
+                this.gridCtx1.lineWidth = 0.5;
+                
+                for (let x = this.pan.x % gridSize; x < this.canvas1.width; x += gridSize) {
+                    this.gridCtx1.beginPath();
+                    this.gridCtx1.moveTo(x, 0);
+                    this.gridCtx1.lineTo(x, this.canvas1.height);
+                    this.gridCtx1.stroke();
+                }
+                
+                for (let y = this.pan.y % gridSize; y < this.canvas1.height; y += gridSize) {
+                    this.gridCtx1.beginPath();
+                    this.gridCtx1.moveTo(0, y);
+                    this.gridCtx1.lineTo(this.canvas1.width, y);
+                    this.gridCtx1.stroke();
+                }
+                
+                // Hexagonal grid
+                this.gridCtx2.strokeStyle = '#22c55e';
+                this.gridCtx2.lineWidth = 0.5;
+                
+                const hexRadius = gridSize / 2;
+                const hexHeight = Math.sqrt(3) / 2 * hexRadius;
+                
+                for (let row = -2; row < this.canvas2.height / hexHeight + 2; row++) {
+                    for (let col = -2; col < this.canvas2.width / (hexRadius * 1.5) + 2; col++) {
+                        const x = this.pan.x + col * hexRadius * 1.5;
+                        const y = this.pan.y + row * hexHeight * 2 + (col % 2) * hexHeight;
+                        
+                        this.drawHexagon(this.gridCtx2, x, y, hexRadius);
+                    }
+                }
+            }
+            
+            drawHexagon(ctx, centerX, centerY, radius) {
+                ctx.beginPath();
+                for (let i = 0; i < 6; i++) {
+                    const angle = (Math.PI / 3) * i;
+                    const x = centerX + radius * Math.cos(angle);
+                    const y = centerY + radius * Math.sin(angle);
+                    
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.closePath();
+                ctx.stroke();
+            }
+            
+            resizeCanvases() {
+                const containers = [this.container1, this.container2];
+                const canvases = [this.canvas1, this.canvas2];
+                const grids = [this.grid1, this.grid2];
+                
+                containers.forEach((container, index) => {
+                    const rect = container.getBoundingClientRect();
+                    const canvas = canvases[index];
+                    const grid = grids[index];
+                    
+                    canvas.width = rect.width;
+                    canvas.height = rect.height;
+                    canvas.style.width = rect.width + 'px';
+                    canvas.style.height = rect.height + 'px';
+                    
+                    grid.width = rect.width;
+                    grid.height = rect.height;
+                    grid.style.width = rect.width + 'px';
+                    grid.style.height = rect.height + 'px';
+                });
+            }
+        }
+        
+        // Initialize the viewer when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            const viewer = new HexagonalImageViewer();
+        });
+    </script>
+</body>
+</html>
