@@ -195,9 +195,47 @@
             }
         }
 
+        .status-info { color: #4ade80; }
+        .status-warn { color: #fbbf24; }
+        .status-error { color: #ef4444; }
+        .status-debug { color: #8b5cf6; }
+        .status-success { color: #10b981; }
+
+        .debug-panel {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            width: 300px;
+            max-height: 200px;
+            background: rgba(15, 39, 21, 0.95);
+            border: 1px solid #22c55e;
+            border-radius: 4px;
+            padding: 8px;
+            font-size: 8px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+        }
+
+        .debug-toggle {
+            position: fixed;
+            top: 10px;
+            right: 320px;
+            background: #166534;
+            border: 1px solid #22c55e;
+            color: #dcfce7;
+            padding: 4px 8px;
+            font-size: 9px;
+            cursor: pointer;
+            border-radius: 2px;
+            z-index: 1001;
+        }
+
         .performance-indicator {
             color: #86efac;
             font-size: 8px;
+        }55e;
+            color: #0a1a0a;
         }
     </style>
 </head>
@@ -252,9 +290,474 @@
         </div>
     </div>
 
+    <button class="debug-toggle" onclick="toggleDebugPanel()">Debug</button>
+    <div class="debug-panel" id="debugPanel">
+        <div style="font-weight: bold; margin-bottom: 4px;">Debug Console</div>
+        <div id="debugLog"></div>
+    </div>
+
     <script>
+        // Debug logging system
+        class DebugLogger {
+            constructor() {
+                this.logs = [];
+                this.enableConsole = true;
+            }
+            
+            log(level, message, data = null) {
+                const timestamp = new Date().toISOString();
+                const logEntry = { timestamp, level, message, data };
+                this.logs.push(logEntry);
+                
+                if (this.enableConsole) {
+                    const style = this.getLogStyle(level);
+                    console.log(`%c[${level}] ${timestamp} - ${message}`, style, data || '');
+                }
+                
+                this.updateStatusBar(level, message);
+            }
+            
+            getLogStyle(level) {
+                const styles = {
+                    INFO: 'color: #4ade80; font-weight: bold;',
+                    WARN: 'color: #fbbf24; font-weight: bold;',
+                    ERROR: 'color: #ef4444; font-weight: bold;',
+                    DEBUG: 'color: #8b5cf6; font-weight: normal;',
+                    SUCCESS: 'color: #10b981; font-weight: bold;'
+                };
+                return styles[level] || styles.INFO;
+            }
+            
+            updateStatusBar(level, message) {
+                const statusEl = document.getElementById('statusText');
+                if (statusEl) {
+                    statusEl.textContent = `${message}`;
+                    statusEl.className = `status-${level.toLowerCase()}`;
+                }
+                
+                // Update debug panel
+                this.updateDebugPanel();
+            }
+            
+            updateDebugPanel() {
+                const debugLog = document.getElementById('debugLog');
+                if (debugLog) {
+                    const recentLogs = this.logs.slice(-20); // Show last 20 logs
+                    debugLog.innerHTML = recentLogs.map(log => 
+                        `<div style="color: ${this.getLogColor(log.level)}; margin: 1px 0;">
+                            [${log.level}] ${log.timestamp.split('T')[1].split('.')[0]} - ${log.message}
+                        </div>`
+                    ).join('');
+                    debugLog.scrollTop = debugLog.scrollHeight;
+                }
+            }
+            
+            getLogColor(level) {
+                const colors = {
+                    INFO: '#4ade80',
+                    WARN: '#fbbf24', 
+                    ERROR: '#ef4444',
+                    DEBUG: '#8b5cf6',
+                    SUCCESS: '#10b981'
+                };
+                return colors[level] || '#4ade80';
+            }
+            
+            exportLogs() {
+                return JSON.stringify(this.logs, null, 2);
+            }
+        }
+
+        // RAW file processor with detailed TIFF/RW2 parsing
+        class RawProcessor {
+            constructor(logger) {
+                this.logger = logger;
+                this.supportedFormats = {
+                    'rw2': this.processRW2.bind(this),
+                    'cr2': this.processCR2.bind(this),
+                    'nef': this.processNEF.bind(this),
+                    'orf': this.processORF.bind(this),
+                    'dng': this.processDNG.bind(this),
+                    'arw': this.processARW.bind(this),
+                    'pef': this.processPEF.bind(this),
+                    'x3f': this.processX3F.bind(this)
+                };
+            }
+            
+            async processRawFile(file) {
+                const extension = file.name.split('.').pop().toLowerCase();
+                this.logger.log('INFO', `Processing RAW file: ${file.name} (${extension})`);
+                
+                const arrayBuffer = await file.arrayBuffer();
+                const dataView = new DataView(arrayBuffer);
+                const uint8Array = new Uint8Array(arrayBuffer);
+                
+                this.logger.log('DEBUG', `File size: ${arrayBuffer.byteLength} bytes`);
+                
+                if (this.supportedFormats[extension]) {
+                    return await this.supportedFormats[extension](dataView, uint8Array, file);
+                } else {
+                    throw new Error(`Unsupported RAW format: ${extension}`);
+                }
+            }
+            
+            async processRW2(dataView, uint8Array, file) {
+                this.logger.log('INFO', 'Processing Panasonic RW2 file');
+                
+                // RW2 is based on TIFF format
+                const tiffHeader = this.parseTiffHeader(dataView);
+                this.logger.log('DEBUG', 'TIFF Header', tiffHeader);
+                
+                if (!tiffHeader) {
+                    throw new Error('Invalid TIFF/RW2 header');
+                }
+                
+                // Parse IFD (Image File Directory)
+                const ifd = this.parseIFD(dataView, tiffHeader.ifdOffset, tiffHeader.littleEndian);
+                this.logger.log('DEBUG', 'IFD entries', ifd);
+                
+                // Look for RAW data and thumbnails
+                const rawData = await this.extractRW2Data(dataView, uint8Array, ifd, tiffHeader);
+                
+                if (rawData.fullResImage) {
+                    this.logger.log('SUCCESS', `Extracted full resolution RAW data: ${rawData.width}x${rawData.height}`);
+                    return rawData.fullResImage;
+                } else if (rawData.preview) {
+                    this.logger.log('WARN', 'Using preview image (full RAW processing not available)');
+                    return rawData.preview;
+                } else {
+                    throw new Error('No usable image data found in RW2 file');
+                }
+            }
+            
+            parseTiffHeader(dataView) {
+                try {
+                    // Check byte order
+                    const byteOrder = dataView.getUint16(0, false);
+                    let littleEndian;
+                    
+                    if (byteOrder === 0x4949) { // "II"
+                        littleEndian = true;
+                        this.logger.log('DEBUG', 'TIFF byte order: Little Endian');
+                    } else if (byteOrder === 0x4D4D) { // "MM"
+                        littleEndian = false;
+                        this.logger.log('DEBUG', 'TIFF byte order: Big Endian');
+                    } else {
+                        this.logger.log('ERROR', `Invalid TIFF magic number: 0x${byteOrder.toString(16)}`);
+                        return null;
+                    }
+                    
+                    // Check TIFF magic number (42)
+                    const magic = dataView.getUint16(2, littleEndian);
+                    if (magic !== 42) {
+                        this.logger.log('ERROR', `Invalid TIFF magic: ${magic}, expected 42`);
+                        return null;
+                    }
+                    
+                    // Get IFD offset
+                    const ifdOffset = dataView.getUint32(4, littleEndian);
+                    this.logger.log('DEBUG', `IFD offset: 0x${ifdOffset.toString(16)}`);
+                    
+                    return { littleEndian, ifdOffset };
+                } catch (error) {
+                    this.logger.log('ERROR', 'Failed to parse TIFF header', error);
+                    return null;
+                }
+            }
+            
+            parseIFD(dataView, offset, littleEndian) {
+                try {
+                    const entryCount = dataView.getUint16(offset, littleEndian);
+                    this.logger.log('DEBUG', `IFD entries count: ${entryCount}`);
+                    
+                    const entries = {};
+                    
+                    for (let i = 0; i < entryCount; i++) {
+                        const entryOffset = offset + 2 + (i * 12);
+                        const tag = dataView.getUint16(entryOffset, littleEndian);
+                        const type = dataView.getUint16(entryOffset + 2, littleEndian);
+                        const count = dataView.getUint32(entryOffset + 4, littleEndian);
+                        const valueOffset = dataView.getUint32(entryOffset + 8, littleEndian);
+                        
+                        entries[tag] = {
+                            tag: tag,
+                            type: type,
+                            count: count,
+                            valueOffset: valueOffset,
+                            name: this.getTiffTagName(tag)
+                        };
+                        
+                        this.logger.log('DEBUG', `Tag 0x${tag.toString(16)} (${entries[tag].name}): type=${type}, count=${count}, offset=0x${valueOffset.toString(16)}`);
+                    }
+                    
+                    return entries;
+                } catch (error) {
+                    this.logger.log('ERROR', 'Failed to parse IFD', error);
+                    return {};
+                }
+            }
+            
+            getTiffTagName(tag) {
+                const tagNames = {
+                    0x0100: 'ImageWidth',
+                    0x0101: 'ImageLength',
+                    0x0102: 'BitsPerSample',
+                    0x0103: 'Compression',
+                    0x0106: 'PhotometricInterpretation',
+                    0x010E: 'ImageDescription',
+                    0x010F: 'Make',
+                    0x0110: 'Model',
+                    0x0111: 'StripOffsets',
+                    0x0112: 'Orientation',
+                    0x0115: 'SamplesPerPixel',
+                    0x0116: 'RowsPerStrip',
+                    0x0117: 'StripByteCounts',
+                    0x011A: 'XResolution',
+                    0x011B: 'YResolution',
+                    0x011C: 'PlanarConfiguration',
+                    0x0128: 'ResolutionUnit',
+                    0x0132: 'DateTime',
+                    0x013B: 'Artist',
+                    0x013E: 'WhitePoint',
+                    0x013F: 'PrimaryChromaticities',
+                    0x0201: 'JPEGInterchangeFormat',
+                    0x0202: 'JPEGInterchangeFormatLength',
+                    0x8769: 'ExifIFD',
+                    0x8825: 'GPSIFD'
+                };
+                return tagNames[tag] || `Unknown_0x${tag.toString(16)}`;
+            }
+            
+            async extractRW2Data(dataView, uint8Array, ifd, tiffHeader) {
+                const results = {
+                    width: null,
+                    height: null,
+                    fullResImage: null,
+                    preview: null
+                };
+                
+                // Get image dimensions
+                if (ifd[0x0100]) { // ImageWidth
+                    results.width = this.readTiffValue(dataView, ifd[0x0100], tiffHeader.littleEndian);
+                    this.logger.log('DEBUG', `Image width: ${results.width}`);
+                }
+                
+                if (ifd[0x0101]) { // ImageLength
+                    results.height = this.readTiffValue(dataView, ifd[0x0101], tiffHeader.littleEndian);
+                    this.logger.log('DEBUG', `Image height: ${results.height}`);
+                }
+                
+                // Look for JPEG preview
+                if (ifd[0x0201] && ifd[0x0202]) { // JPEGInterchangeFormat and Length
+                    const jpegOffset = this.readTiffValue(dataView, ifd[0x0201], tiffHeader.littleEndian);
+                    const jpegLength = this.readTiffValue(dataView, ifd[0x0202], tiffHeader.littleEndian);
+                    
+                    this.logger.log('DEBUG', `JPEG preview found: offset=0x${jpegOffset.toString(16)}, length=${jpegLength}`);
+                    
+                    try {
+                        const jpegData = uint8Array.slice(jpegOffset, jpegOffset + jpegLength);
+                        const blob = new Blob([jpegData], { type: 'image/jpeg' });
+                        const url = URL.createObjectURL(blob);
+                        
+                        const img = await this.loadImageFromUrl(url);
+                        results.preview = img;
+                        this.logger.log('SUCCESS', `JPEG preview loaded: ${img.width}x${img.height}`);
+                        
+                        URL.revokeObjectURL(url);
+                    } catch (error) {
+                        this.logger.log('ERROR', 'Failed to load JPEG preview', error);
+                    }
+                }
+                
+                // Attempt to process RAW sensor data
+                if (ifd[0x0111] && ifd[0x0117]) { // StripOffsets and StripByteCounts
+                    this.logger.log('INFO', 'Attempting to process RAW sensor data...');
+                    
+                    try {
+                        const rawImage = await this.processRawSensorData(dataView, uint8Array, ifd, tiffHeader, results);
+                        if (rawImage) {
+                            results.fullResImage = rawImage;
+                            this.logger.log('SUCCESS', 'RAW sensor data processed successfully');
+                        }
+                    } catch (error) {
+                        this.logger.log('WARN', 'RAW sensor processing failed', error);
+                    }
+                }
+                
+                return results;
+            }
+            
+            async processRawSensorData(dataView, uint8Array, ifd, tiffHeader, imageInfo) {
+                // This is a simplified RAW processor
+                // In production, you'd need proper demosaicing, white balance, etc.
+                
+                const stripOffsets = this.readTiffValue(dataView, ifd[0x0111], tiffHeader.littleEndian);
+                const stripByteCounts = this.readTiffValue(dataView, ifd[0x0117], tiffHeader.littleEndian);
+                
+                this.logger.log('DEBUG', `Strip offsets: ${stripOffsets}, byte counts: ${stripByteCounts}`);
+                
+                if (!imageInfo.width || !imageInfo.height) {
+                    throw new Error('Missing image dimensions for RAW processing');
+                }
+                
+                // Create canvas for RAW processing
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = imageInfo.width;
+                canvas.height = imageInfo.height;
+                
+                // Simple demosaicing (this is very basic - production would use proper algorithms)
+                const imageData = ctx.createImageData(imageInfo.width, imageInfo.height);
+                
+                try {
+                    // Read RAW sensor data
+                    const rawData = uint8Array.slice(stripOffsets, stripOffsets + stripByteCounts);
+                    
+                    // Apply basic demosaicing (simplified Bayer pattern processing)
+                    for (let y = 0; y < imageInfo.height && y * imageInfo.width * 2 < rawData.length; y++) {
+                        for (let x = 0; x < imageInfo.width && (y * imageInfo.width + x) * 2 < rawData.length; x++) {
+                            const pixelIndex = (y * imageInfo.width + x) * 4;
+                            const rawIndex = (y * imageInfo.width + x) * 2;
+                            
+                            if (rawIndex + 1 < rawData.length) {
+                                // Read 16-bit RAW value and convert to 8-bit
+                                const rawValue = (rawData[rawIndex] << 8) | rawData[rawIndex + 1];
+                                const normalized = Math.min(255, Math.floor(rawValue / 256));
+                                
+                                // Simple Bayer pattern demosaicing
+                                if ((x + y) % 2 === 0) {
+                                    // Green pixels
+                                    imageData.data[pixelIndex] = normalized * 0.3; // R
+                                    imageData.data[pixelIndex + 1] = normalized; // G
+                                    imageData.data[pixelIndex + 2] = normalized * 0.3; // B
+                                } else if (x % 2 === 0) {
+                                    // Blue pixels
+                                    imageData.data[pixelIndex] = normalized * 0.2; // R
+                                    imageData.data[pixelIndex + 1] = normalized * 0.7; // G
+                                    imageData.data[pixelIndex + 2] = normalized; // B
+                                } else {
+                                    // Red pixels
+                                    imageData.data[pixelIndex] = normalized; // R
+                                    imageData.data[pixelIndex + 1] = normalized * 0.7; // G
+                                    imageData.data[pixelIndex + 2] = normalized * 0.2; // B
+                                }
+                                imageData.data[pixelIndex + 3] = 255; // Alpha
+                            }
+                        }
+                    }
+                    
+                    ctx.putImageData(imageData, 0, 0);
+                    
+                    // Convert canvas to image
+                    const dataUrl = canvas.toDataURL();
+                    const img = await this.loadImageFromUrl(dataUrl);
+                    
+                    return img;
+                    
+                } catch (error) {
+                    this.logger.log('ERROR', 'RAW demosaicing failed', error);
+                    throw error;
+                }
+            }
+            
+            readTiffValue(dataView, entry, littleEndian) {
+                // Simplified TIFF value reader
+                if (entry.count === 1) {
+                    switch (entry.type) {
+                        case 3: // SHORT
+                            return entry.valueOffset & 0xFFFF;
+                        case 4: // LONG
+                            return entry.valueOffset;
+                        default:
+                            return entry.valueOffset;
+                    }
+                } else {
+                    // For multiple values, read from the offset
+                    return dataView.getUint32(entry.valueOffset, littleEndian);
+                }
+            }
+            
+            loadImageFromUrl(url) {
+                return new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.onload = () => resolve(img);
+                    img.onerror = reject;
+                    img.src = url;
+                });
+            }
+            
+            // Placeholder processors for other RAW formats
+            async processCR2(dataView, uint8Array, file) {
+                this.logger.log('WARN', 'CR2 processing not fully implemented, attempting JPEG extraction');
+                return this.extractEmbeddedJpeg(uint8Array);
+            }
+            
+            async processNEF(dataView, uint8Array, file) {
+                this.logger.log('WARN', 'NEF processing not fully implemented, attempting JPEG extraction');
+                return this.extractEmbeddedJpeg(uint8Array);
+            }
+            
+            async processORF(dataView, uint8Array, file) {
+                this.logger.log('WARN', 'ORF processing not fully implemented, attempting JPEG extraction');
+                return this.extractEmbeddedJpeg(uint8Array);
+            }
+            
+            async processDNG(dataView, uint8Array, file) {
+                this.logger.log('WARN', 'DNG processing not fully implemented, attempting JPEG extraction');
+                return this.extractEmbeddedJpeg(uint8Array);
+            }
+            
+            async processARW(dataView, uint8Array, file) {
+                this.logger.log('WARN', 'ARW processing not fully implemented, attempting JPEG extraction');
+                return this.extractEmbeddedJpeg(uint8Array);
+            }
+            
+            async processPEF(dataView, uint8Array, file) {
+                this.logger.log('WARN', 'PEF processing not fully implemented, attempting JPEG extraction');
+                return this.extractEmbeddedJpeg(uint8Array);
+            }
+            
+            async processX3F(dataView, uint8Array, file) {
+                this.logger.log('WARN', 'X3F processing not fully implemented, attempting JPEG extraction');
+                return this.extractEmbeddedJpeg(uint8Array);
+            }
+            
+            async extractEmbeddedJpeg(uint8Array) {
+                const jpegStart = this.findJpegMarker(uint8Array, 0xFF, 0xD8);
+                if (jpegStart !== -1) {
+                    const jpegEnd = this.findJpegMarker(uint8Array, 0xFF, 0xD9, jpegStart);
+                    if (jpegEnd !== -1) {
+                        const jpegData = uint8Array.slice(jpegStart, jpegEnd + 2);
+                        const blob = new Blob([jpegData], { type: 'image/jpeg' });
+                        const url = URL.createObjectURL(blob);
+                        
+                        try {
+                            const img = await this.loadImageFromUrl(url);
+                            URL.revokeObjectURL(url);
+                            return img;
+                        } catch (error) {
+                            URL.revokeObjectURL(url);
+                            throw error;
+                        }
+                    }
+                }
+                throw new Error('No embedded JPEG found');
+            }
+            
+            findJpegMarker(data, byte1, byte2, startPos = 0) {
+                for (let i = startPos; i < data.length - 1; i++) {
+                    if (data[i] === byte1 && data[i + 1] === byte2) {
+                        return i;
+                    }
+                }
+                return -1;
+            }
+        }
+
         class HexagonalImageViewer {
             constructor() {
+                this.logger = new DebugLogger();
+                this.rawProcessor = new RawProcessor(this.logger);
                 this.canvas1 = document.getElementById('canvas1');
                 this.canvas2 = document.getElementById('canvas2');
                 this.ctx1 = this.canvas1.getContext('2d');
@@ -405,54 +908,24 @@
             }
             
             async loadRawImage(file) {
-                document.getElementById('statusText').textContent = 'Processing RAW image...';
+                this.logger.log('INFO', `Starting RAW processing for: ${file.name}`);
                 
                 try {
-                    // For RAW files, we'll extract the embedded JPEG preview
-                    // This is a simplified approach - in production you'd use a proper RAW processor
-                    const arrayBuffer = await file.arrayBuffer();
-                    const uint8Array = new Uint8Array(arrayBuffer);
+                    const img = await this.rawProcessor.processRawFile(file);
                     
-                    // Look for JPEG headers in the RAW file (embedded preview)
-                    const jpegStart = this.findJpegInRaw(uint8Array);
+                    this.originalImage = img;
+                    this.extractImageData();
+                    this.resetView();
+                    this.processImage();
                     
-                    if (jpegStart !== -1) {
-                        const jpegEnd = this.findJpegEnd(uint8Array, jpegStart);
-                        if (jpegEnd !== -1) {
-                            const jpegData = uint8Array.slice(jpegStart, jpegEnd);
-                            const blob = new Blob([jpegData], { type: 'image/jpeg' });
-                            const url = URL.createObjectURL(blob);
-                            
-                            const img = new Image();
-                            img.onload = () => {
-                                this.originalImage = img;
-                                this.extractImageData();
-                                this.resetView();
-                                this.processImage();
-                                
-                                document.getElementById('imageInfo').textContent = 
-                                    `${img.naturalWidth}×${img.naturalHeight} | ${(file.size / 1024 / 1024).toFixed(2)}MB (RAW preview)`;
-                                document.getElementById('statusText').textContent = 'RAW image loaded (using embedded preview)';
-                                
-                                URL.revokeObjectURL(url);
-                            };
-                            
-                            img.onerror = () => {
-                                document.getElementById('statusText').textContent = 'Failed to load RAW preview';
-                                URL.revokeObjectURL(url);
-                            };
-                            
-                            img.src = url;
-                        } else {
-                            throw new Error('No valid JPEG preview found in RAW file');
-                        }
-                    } else {
-                        throw new Error('No JPEG preview found in RAW file');
-                    }
+                    document.getElementById('imageInfo').textContent = 
+                        `${img.naturalWidth}×${img.naturalHeight} | ${(file.size / 1024 / 1024).toFixed(2)}MB (RAW processed)`;
+                    
+                    this.logger.log('SUCCESS', 'RAW image processing completed successfully');
                     
                 } catch (error) {
-                    console.error('RAW processing error:', error);
-                    document.getElementById('statusText').textContent = 'RAW processing failed: ' + error.message;
+                    this.logger.log('ERROR', 'RAW processing failed', error);
+                    throw error;
                 }
             }
             
@@ -871,7 +1344,25 @@
         // Initialize the viewer when the page loads
         document.addEventListener('DOMContentLoaded', () => {
             const viewer = new HexagonalImageViewer();
+            
+            // Make viewer globally accessible for debugging
+            window.hexViewer = viewer;
+            window.exportLogs = () => {
+                const logs = viewer.logger.exportLogs();
+                const blob = new Blob([logs], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'hex-viewer-debug-log.json';
+                a.click();
+                URL.revokeObjectURL(url);
+            };
         });
+        
+        function toggleDebugPanel() {
+            const panel = document.getElementById('debugPanel');
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        }
     </script>
 </body>
 </html>
